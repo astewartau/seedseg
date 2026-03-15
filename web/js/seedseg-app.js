@@ -31,6 +31,7 @@ class SeedSegApp {
     // State
     this.inputFile = null;
     this.currentResultTab = 'input';
+    this._buckets = { t1w: [], other: [] };
 
     this.init();
   }
@@ -52,9 +53,7 @@ class SeedSegApp {
 
     this.dicomController = new DicomController({
       updateOutput: (msg) => this.updateOutput(msg),
-      onConversionComplete: (file) => {
-        this.fileIOController.setFileFromDicom(file);
-      }
+      onConversionComplete: (niftiFiles) => this._onDicomConversionComplete(niftiFiles)
     });
 
     this.viewerController = new ViewerController({
@@ -79,7 +78,6 @@ class SeedSegApp {
     // Setup
     await this.setupViewer();
     this.setupEventListeners();
-    this.setupInputModeTabs();
     this.setupInfoTooltips();
 
     // Log threading support
@@ -104,23 +102,8 @@ class SeedSegApp {
   // ==================== Event Listeners ====================
 
   setupEventListeners() {
-    // NIfTI file input
-    const niftiInput = document.getElementById('niftiInput');
-    if (niftiInput) {
-      niftiInput.addEventListener('change', (e) => this.fileIOController.handleFileInput(e));
-    }
-
-    // DICOM file input
-    const dicomInput = document.getElementById('dicomInput');
-    if (dicomInput) {
-      dicomInput.addEventListener('change', (e) => {
-        this.dicomController.convertFiles(Array.from(e.target.files));
-      });
-    }
-
-    // Drag and drop zones
-    this.setupDropZone('niftiDropZone', 'nifti');
-    this.setupDropZone('dicomDropZone', 'dicom');
+    // Unified file input
+    this._setupUnifiedDropZone();
 
     // Run button
     const runBtn = document.getElementById('runSegmentation');
@@ -238,49 +221,262 @@ class SeedSegApp {
     if (closePrivacy) closePrivacy.addEventListener('click', () => this.privacyModal.close());
   }
 
-  setupDropZone(zoneId, mode) {
-    const zone = document.getElementById(zoneId);
-    if (!zone) return;
+  _setupUnifiedDropZone() {
+    const dropZone = document.getElementById('unifiedDrop');
+    const fileInput = document.getElementById('unifiedFiles');
+    if (!dropZone || !fileInput) return;
 
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      zone.classList.add('dragover');
+    fileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) this._handleUnifiedFiles(files);
+      fileInput.value = '';
     });
 
-    zone.addEventListener('dragleave', () => {
-      zone.classList.remove('dragover');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
     });
 
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.classList.remove('dragover');
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
 
-      if (mode === 'dicom') {
-        this.dicomController.convertDropItems(e.dataTransfer.items);
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+
+      const items = e.dataTransfer.items;
+      if (!items || items.length === 0) return;
+
+      // Check for directory entries (DICOM folder drop)
+      let hasDirectory = false;
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry?.();
+        if (entry?.isDirectory) { hasDirectory = true; break; }
+      }
+
+      if (hasDirectory) {
+        this._showDicomStatus(true);
+        this.dicomController.convertDropItems(items);
       } else {
         const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) {
-          this.fileIOController.niftiFile = files[0];
-          this.fileIOController.updateFileListUI('nifti', [files[0]]);
-          this.fileIOController.updateOutput(`Loaded: ${files[0].name}`);
-          this.fileIOController.onFileLoaded(files[0]);
-        }
+        if (files.length > 0) this._handleUnifiedFiles(files);
       }
     });
   }
 
-  setupInputModeTabs() {
-    document.querySelectorAll('.input-mode-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const mode = tab.dataset.mode;
-        this.fileIOController.setInputMode(mode);
+  _handleUnifiedFiles(files) {
+    const niftiFiles = [];
+    const dicomFiles = [];
 
-        document.querySelectorAll('.input-mode-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
+    for (const file of files) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.nii') || name.endsWith('.nii.gz')) {
+        niftiFiles.push(file);
+      } else if (name.endsWith('.json')) {
+        // Ignore JSON sidecars
+      } else if (name.endsWith('.dcm') || name.endsWith('.ima')) {
+        dicomFiles.push(file);
+      } else {
+        // No recognized extension — treat as DICOM
+        dicomFiles.push(file);
+      }
+    }
 
-        document.querySelectorAll('.input-mode-content').forEach(c => c.classList.remove('active'));
-        const content = document.getElementById(`${mode}Mode`);
-        if (content) content.classList.add('active');
+    if (dicomFiles.length > 0) {
+      this._showDicomStatus(true);
+      this.dicomController.convertFiles(dicomFiles);
+    }
+
+    if (niftiFiles.length > 0) {
+      this._addFilesToBuckets(niftiFiles);
+    }
+  }
+
+  _onDicomConversionComplete(niftiFiles) {
+    this._showDicomStatus(false);
+    if (!niftiFiles || niftiFiles.length === 0) return;
+    this._addFilesToBuckets(niftiFiles);
+  }
+
+  _showDicomStatus(show) {
+    const el = document.getElementById('dicomStatus');
+    if (el) el.style.display = show ? 'flex' : 'none';
+  }
+
+  _addFilesToBuckets(files) {
+    for (const file of files) {
+      if (/t1/i.test(file.name)) {
+        this._buckets.t1w.push(file);
+      } else {
+        this._buckets.other.push(file);
+      }
+    }
+    this._onBucketsChanged();
+  }
+
+  _moveToBucket(fromBucket, index, toBucket) {
+    const arr = this._buckets[fromBucket];
+    if (!arr || index < 0 || index >= arr.length) return;
+    const [file] = arr.splice(index, 1);
+    this._buckets[toBucket].push(file);
+    this._onBucketsChanged();
+  }
+
+  _removeFromBucket(bucket, index) {
+    const arr = this._buckets[bucket];
+    if (!arr || index < 0 || index >= arr.length) return;
+    arr.splice(index, 1);
+    this._onBucketsChanged();
+  }
+
+  _clearBucket(bucket) {
+    this._buckets[bucket] = [];
+    this._onBucketsChanged();
+  }
+
+  _onBucketsChanged() {
+    const t1w = this._buckets.t1w;
+    const hasFiles = t1w.length > 0 || this._buckets.other.length > 0;
+
+    // Update triage UI
+    this._renderFileTriage();
+
+    // Update active file and run button
+    const runBtn = document.getElementById('runSegmentation');
+    if (t1w.length === 1) {
+      this.fileIOController.setFile(t1w[0]);
+      if (runBtn) runBtn.disabled = false;
+    } else {
+      this.fileIOController.clearFile();
+      if (runBtn) runBtn.disabled = true;
+    }
+
+    // Update drop zone label
+    const label = document.getElementById('unifiedDrop')?.querySelector('.file-drop-label span');
+    if (label) {
+      label.textContent = hasFiles ? 'Drop more files' : 'Drop NIfTI or DICOM files';
+    }
+    const dropZone = document.getElementById('unifiedDrop');
+    if (dropZone) {
+      if (hasFiles) dropZone.classList.add('has-files');
+      else dropZone.classList.remove('has-files');
+    }
+  }
+
+  _renderFileTriage() {
+    const container = document.getElementById('fileTriage');
+    if (!container) return;
+
+    const { t1w, other } = this._buckets;
+    const hasFiles = t1w.length > 0 || other.length > 0;
+
+    if (!hasFiles) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    const hasError = t1w.length > 1;
+
+    let html = '<div class="file-triage-section">';
+
+    // T1w bucket
+    html += `<div class="file-triage-bucket${hasError ? ' error' : ''}" data-bucket="t1w">`;
+    html += `<div class="file-triage-bucket-header">
+      <span>T1w</span>
+      <span class="file-triage-bucket-count">${t1w.length}</span>
+    </div>`;
+    if (hasError) {
+      html += '<div class="file-triage-error">Only one T1w image allowed. Drag extras to Other.</div>';
+    }
+    html += '<div class="file-triage-drop' + (t1w.length === 0 ? ' empty' : '') + '" data-bucket="t1w">';
+    for (let i = 0; i < t1w.length; i++) {
+      html += `<div class="file-triage-card" draggable="true" data-bucket="t1w" data-index="${i}">
+        <svg class="file-triage-card-grip" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+        <span class="file-triage-card-name" title="${t1w[i].name}">${t1w[i].name}</span>
+        <button class="file-triage-card-delete" data-bucket="t1w" data-index="${i}" title="Remove">&times;</button>
+      </div>`;
+    }
+    html += '</div></div>';
+
+    // Other bucket
+    html += '<div class="file-triage-bucket" data-bucket="other">';
+    html += `<div class="file-triage-bucket-header">
+      <span>Other</span>
+      <span class="file-triage-bucket-count">${other.length}</span>
+      ${other.length > 0 ? '<button class="file-triage-clear" data-bucket="other">Clear</button>' : ''}
+    </div>`;
+    html += '<div class="file-triage-drop' + (other.length === 0 ? ' empty' : '') + '" data-bucket="other">';
+    for (let i = 0; i < other.length; i++) {
+      html += `<div class="file-triage-card" draggable="true" data-bucket="other" data-index="${i}">
+        <svg class="file-triage-card-grip" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+        <span class="file-triage-card-name" title="${other[i].name}">${other[i].name}</span>
+        <button class="file-triage-card-delete" data-bucket="other" data-index="${i}" title="Remove">&times;</button>
+      </div>`;
+    }
+    html += '</div></div>';
+
+    html += '</div>';
+    container.innerHTML = html;
+    container.style.display = 'block';
+
+    this._setupTriageDragDrop(container);
+    this._setupTriageClickHandlers(container);
+  }
+
+  _setupTriageDragDrop(container) {
+    let dragSrcBucket = null;
+    let dragSrcIndex = null;
+
+    container.querySelectorAll('.file-triage-card').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        dragSrcBucket = card.dataset.bucket;
+        dragSrcIndex = parseInt(card.dataset.index);
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        container.querySelectorAll('.file-triage-drop').forEach(d => d.classList.remove('dragover'));
+      });
+    });
+
+    container.querySelectorAll('.file-triage-drop').forEach(dropZone => {
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const targetBucket = dropZone.dataset.bucket;
+        if (dragSrcBucket && targetBucket && dragSrcBucket !== targetBucket && dragSrcIndex != null) {
+          this._moveToBucket(dragSrcBucket, dragSrcIndex, targetBucket);
+        }
+        dragSrcBucket = null;
+        dragSrcIndex = null;
+      });
+    });
+  }
+
+  _setupTriageClickHandlers(container) {
+    container.querySelectorAll('.file-triage-card-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._removeFromBucket(btn.dataset.bucket, parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('.file-triage-clear').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._clearBucket(btn.dataset.bucket);
       });
     });
   }
@@ -744,13 +940,10 @@ class SeedSegApp {
     }
   }
 
-  // Global methods for HTML onclick handlers
-  removeFile(type, index) {
-    this.fileIOController.removeFile(type, index);
-  }
-
-  clearFiles(type) {
-    this.fileIOController.clearFiles(type);
+  // Global method for HTML onclick handler
+  clearFile() {
+    this._buckets = { t1w: [], other: [] };
+    this._onBucketsChanged();
   }
 }
 

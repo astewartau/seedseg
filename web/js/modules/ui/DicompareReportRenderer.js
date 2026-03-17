@@ -449,6 +449,9 @@ export class DicompareReportRenderer {
     // Build schema field lookup: keyword → DICOM tag
     const fieldMap = this._buildSchemaFieldMap(schema);
 
+    // Collect acquisition tags from schema
+    const schemaTags = this._getSchemaAcquisitionTags(schema);
+
     let fieldsHtml = '';
     let rulesHtml = '';
     let uncheckedHtml = '';
@@ -478,7 +481,7 @@ export class DicompareReportRenderer {
 
         fieldsHtml += `${acqHeader}
           <table>
-            <thead><tr><th>Field</th><th>Expected</th><th>Actual</th><th>Status</th></tr></thead>
+            <thead><tr><th style="width: 30%">Field</th><th style="width: 25%">Expected Value</th><th style="width: 25%">Actual Value</th><th style="width: 20%">Status</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>`;
       }
@@ -486,17 +489,27 @@ export class DicompareReportRenderer {
       if (ruleResults.length > 0) {
         const rows = ruleResults.map(r => {
           const status = this._normalizeStatus(r.status || r.complianceStatus);
-          const schemaRule = schemaRules.find(sr => sr.name === (r.rule_name || r.fieldName));
+          const ruleName = r.rule_name || r.fieldName || 'Rule';
+          const schemaRule = schemaRules.find(sr => sr.name === ruleName);
+          const ruleDescription = schemaRule?.description || '';
+          const ruleFields = schemaRule?.fields || [];
+          const fieldsTagHtml = ruleFields.length > 0
+            ? `<div class="rule-fields">${ruleFields.map(f => `<span class="field-tag-badge">${this._escapeHtml(f)}</span>`).join('')}</div>`
+            : '';
+          const statusText = r.message || (status === 'pass' ? 'OK' : 'Failed');
           return `<tr>
-            <td><span class="field-name">${this._escapeHtml(r.rule_name || r.fieldName || 'Rule')}</span>
-            ${schemaRule?.description ? `<div class="rule-desc">${this._escapeHtml(schemaRule.description)}</div>` : ''}</td>
-            <td class="${status}">${this._escapeHtml(r.message || status)}</td>
+            <td>
+              <div class="field-name">${this._escapeHtml(ruleName)}</div>
+              ${fieldsTagHtml}
+            </td>
+            <td>${this._escapeHtml(ruleDescription)}</td>
+            <td class="${status}">${this._escapeHtml(statusText)}</td>
           </tr>`;
         }).join('');
 
         rulesHtml += `<h2>Validation Rules</h2>
           <table>
-            <thead><tr><th>Rule</th><th>Status</th></tr></thead>
+            <thead><tr><th style="width: 25%">Rule</th><th style="width: 45%">Description</th><th style="width: 30%">Status</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>`;
       }
@@ -513,7 +526,7 @@ export class DicompareReportRenderer {
           <div class="unchecked-section">
             <h2 class="unchecked-header">${uncheckedFields.length} field${uncheckedFields.length !== 1 ? 's' : ''} in data not validated by schema</h2>
             <table class="unchecked-table">
-              <thead><tr><th>Field</th><th>Value in Data</th></tr></thead>
+              <thead><tr><th style="width: 40%">Field</th><th style="width: 60%">Value in Data</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>`;
@@ -531,6 +544,25 @@ export class DicompareReportRenderer {
       }
     }
 
+    // Tag bubbles
+    const tagsHtml = schemaTags.length > 0
+      ? `<div class="schema-tags">${schemaTags.map(t => `<span class="tag${t.startsWith('analysis:') ? ' tag-analysis' : ''}">${this._escapeHtml(t)}</span>`).join('')}</div>`
+      : '';
+
+    // Header
+    const headerHtml = `
+      <div class="header-section">
+        <div class="header-row">
+          <div class="header-item schema">
+            <div class="header-label">Reference</div>
+            <div class="schema-source">From <strong>${this._escapeHtml(schemaName)}</strong>${schemaVersion ? ` v${this._escapeHtml(schemaVersion)}` : ''}</div>
+            <div class="header-title">${this._escapeHtml(this._getSchemaAcquisitionName(schema) || schemaName)}</div>
+            ${schemaDesc ? `<div class="header-subtitle">${this._escapeHtml(schemaDesc)}</div>` : ''}
+            ${tagsHtml}
+          </div>
+        </div>
+      </div>`;
+
     // README / detailed description from schema acquisitions
     const readmeHtml = this._buildReadmeHtml(schema, schemaName, schemaVersion, schemaAuthors);
 
@@ -541,24 +573,17 @@ export class DicompareReportRenderer {
   <style>${this._getPrintStyles()}</style>
 </head>
 <body>
-  <div class="header-section">
-    <div class="header-item schema">
-      <div class="header-label">Reference Schema</div>
-      <div class="header-title">${this._escapeHtml(schemaName)}${schemaVersion ? ` <span class="version">v${this._escapeHtml(schemaVersion)}</span>` : ''}</div>
-      ${schemaDesc ? `<div class="header-subtitle">${this._escapeHtml(schemaDesc)}</div>` : ''}
-      ${schemaAuthors.length > 0 ? `<div class="header-authors">Authors: ${schemaAuthors.map(a => this._escapeHtml(a)).join(', ')}</div>` : ''}
-    </div>
-  </div>
+  ${headerHtml}
   <div class="summary">
     <span class="badge pass">${pass} Passed</span>
     <span class="badge fail">${fail} Failed</span>
     <span class="badge warning">${warning} Warning${warning !== 1 ? 's' : ''}</span>
   </div>
-  <h2>Field Checks</h2>
-  ${fieldsHtml || '<p>No field checks available.</p>'}
-  ${rulesHtml}
-  ${uncheckedHtml}
   ${readmeHtml}
+  ${rulesHtml}
+  <h2>Fields</h2>
+  ${fieldsHtml || '<p>No field checks available.</p>'}
+  ${uncheckedHtml}
   <div class="print-date">Generated on ${new Date().toLocaleDateString()} by SeedSeg + dicompare</div>
 </body>
 </html>`;
@@ -567,6 +592,29 @@ export class DicompareReportRenderer {
   _escapeHtml(str) {
     const s = String(str ?? '');
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Get the first acquisition name from the schema.
+   */
+  _getSchemaAcquisitionName(schema) {
+    if (!schema?.acquisitions) return '';
+    const keys = Object.keys(schema.acquisitions);
+    return keys.length > 0 ? keys[0] : '';
+  }
+
+  /**
+   * Collect tags from all acquisitions in the schema.
+   */
+  _getSchemaAcquisitionTags(schema) {
+    if (!schema?.acquisitions) return [];
+    const tags = new Set();
+    for (const acqData of Object.values(schema.acquisitions)) {
+      if (acqData.tags) {
+        for (const t of acqData.tags) tags.add(t);
+      }
+    }
+    return [...tags];
   }
 
   /**
@@ -668,46 +716,57 @@ export class DicompareReportRenderer {
         margin: 0 auto;
         color: #1a1a1a;
       }
-      .header-section { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid #e5e5e5; }
+      .header-section { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #e5e5e5; }
+      .schema-source { font-size: 12px; color: #666; margin-bottom: 4px; }
+      .schema-source strong { color: #333; }
+      .schema-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+      .tag { display: inline-block; padding: 3px 10px; background: #e0e7ff; color: #3730a3; font-size: 11px; border-radius: 12px; font-weight: 500; }
+      .tag-analysis { background: #f3e8ff; color: #7e22ce; }
+      .header-row { display: flex; gap: 40px; }
+      .header-item { flex: 1; }
       .header-item.schema { border-left: 3px solid #2563eb; padding-left: 12px; }
+      .header-item.data { border-left: 3px solid #d97706; padding-left: 12px; }
       .header-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #666; margin-bottom: 4px; }
       .header-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
-      .header-subtitle { font-size: 13px; color: #666; margin-bottom: 4px; }
-      .header-authors { font-size: 12px; color: #888; }
-      .version { font-size: 14px; font-weight: 400; color: #888; }
+      .header-subtitle { font-size: 14px; color: #666; }
       .summary { display: flex; gap: 10px; margin-bottom: 20px; }
       .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
       .badge.pass { background: #dff0d8; color: #3c763d; }
       .badge.fail { background: #f2dede; color: #a94442; }
       .badge.warning { background: #fcf8e3; color: #8a6d3b; }
-      h2 { font-size: 16px; margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 8px; color: #333; }
+      h2 { font-size: 16px; margin-top: 28px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 8px; color: #333; }
       h3 { font-size: 14px; margin-top: 20px; margin-bottom: 8px; color: #444; }
       table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
       th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; vertical-align: top; }
       th { background: #f5f5f5; font-weight: 600; }
       code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 10px; color: #666; }
-      .field-name { font-weight: 500; }
-      .rule-desc { font-size: 11px; color: #666; margin-top: 4px; }
+      .field-name { font-weight: 500; color: #1a1a1a; }
+      .rule-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+      .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; }
       .pass { color: #16a34a; font-weight: 500; }
       .fail { color: #dc2626; font-weight: 500; }
       .warning { color: #ca8a04; font-weight: 500; }
       .unknown { color: #9ca3af; font-style: italic; }
       .na { color: #9ca3af; }
+      .note { font-size: 11px; color: #666; font-style: italic; margin-top: 8px; }
       .unchecked-section { margin-top: 24px; }
-      .unchecked-header { color: #666; font-size: 14px; border-bottom: 1px dashed #ccc; }
+      .unchecked-header { color: #333; margin-top: 0; }
       .unchecked-table th { background: #f9fafb; }
+      .unchecked-table td { color: #1a1a1a; }
       .readme-section { margin-top: 32px; border-top: 2px solid #3b82f6; background: #eff6ff; border-radius: 8px; padding: 20px; }
       .readme-section > h2 { color: #1e40af; margin-top: 0; margin-bottom: 16px; border-bottom: none; padding-bottom: 0; }
       .readme-meta { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
       .readme-meta-item { font-size: 12px; color: #1e40af; margin: 4px 0; }
       .readme-meta-item strong { color: #1e3a8a; }
       .readme-content { font-size: 13px; line-height: 1.6; color: #1e3a8a; }
-      .readme-content .readme-h1 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; color: #1e40af; }
-      .readme-content .readme-h2 { font-size: 14px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; color: #1e40af; }
+      .readme-content .readme-h1 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; border-bottom: none; padding-bottom: 0; color: #1e40af; }
+      .readme-content .readme-h2 { font-size: 14px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; border-bottom: none; padding-bottom: 0; color: #1e40af; }
       .readme-content .readme-h3 { font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 6px; color: #1e40af; }
-      .readme-content p { margin: 8px 0; }
-      .readme-content ul { margin: 8px 0; padding-left: 24px; }
+      .readme-content .readme-h4 { font-size: 12px; font-weight: 600; margin-top: 14px; margin-bottom: 6px; color: #1e40af; }
+      .readme-content p { margin: 12px 0; }
+      .readme-content ul, .readme-content ol { margin: 12px 0; padding-left: 24px; }
       .readme-content li { margin: 4px 0; }
+      .readme-content a { color: #2563eb; text-decoration: underline; }
       .readme-content code { background: #dbeafe; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; color: #1e40af; }
       .print-date { color: #999; font-size: 11px; margin-top: 40px; text-align: center; }
       @media print {
@@ -716,6 +775,8 @@ export class DicompareReportRenderer {
         table { page-break-inside: auto; }
         tr { page-break-inside: avoid; }
         thead { display: table-header-group; }
+        .unchecked-section { page-break-before: auto; }
+        .unchecked-header { page-break-after: avoid; }
       }
     `;
   }

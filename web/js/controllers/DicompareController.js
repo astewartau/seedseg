@@ -139,7 +139,7 @@ export class DicompareController {
 
   async _loadSchema() {
     if (this.schemaContent) return this.schemaContent;
-    const response = await fetch('schemas/SeedSeg_Prostate_T1w_v1.0.json');
+    const response = await fetch('https://raw.githubusercontent.com/astewartau/dicompare-web/refs/tags/v0.3.4/public/schemas/SeedSeg_Prostate_T1w_v1.0.json');
     if (!response.ok) throw new Error('Failed to load SeedSeg schema');
     this.schemaContent = await response.text();
     return this.schemaContent;

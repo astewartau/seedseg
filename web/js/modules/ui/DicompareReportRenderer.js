@@ -22,6 +22,9 @@ export class DicompareReportRenderer {
       return;
     }
 
+    // Build schema field lookup: keyword → DICOM tag
+    this._schemaFieldMap = this._buildSchemaFieldMap(schema);
+
     // Schema info header
     container.appendChild(this._createSchemaHeader(schema));
 
@@ -34,6 +37,22 @@ export class DicompareReportRenderer {
       const acquisition = acquisitions[i] || null;
       container.appendChild(this._createAcquisitionSection(compliance, schema, acquisition));
     }
+  }
+
+  /**
+   * Build a map from field keyword to DICOM tag from the schema.
+   */
+  _buildSchemaFieldMap(schema) {
+    const map = new Map();
+    if (!schema?.acquisitions) return map;
+    for (const acqData of Object.values(schema.acquisitions)) {
+      for (const f of (acqData.fields || [])) {
+        if (f.field && f.tag) {
+          map.set(f.field, f.tag);
+        }
+      }
+    }
+    return map;
   }
 
   _createSchemaHeader(schema) {
@@ -272,16 +291,18 @@ export class DicompareReportRenderer {
     for (const r of results) {
       const tr = document.createElement('tr');
 
-      // Field name + tag
+      // Field name + DICOM tag from schema
       const tdField = document.createElement('td');
-      const fieldName = document.createElement('span');
-      fieldName.className = 'dicompare-field-name';
-      fieldName.textContent = r.fieldName || r.field || '';
-      tdField.appendChild(fieldName);
-      if (r.fieldPath) {
+      const keyword = r.fieldName || r.field || '';
+      const fieldNameEl = document.createElement('span');
+      fieldNameEl.className = 'dicompare-field-name';
+      fieldNameEl.textContent = keyword;
+      tdField.appendChild(fieldNameEl);
+      const dicomTag = this._schemaFieldMap?.get(keyword);
+      if (dicomTag) {
         const tag = document.createElement('span');
         tag.className = 'dicompare-field-tag';
-        tag.textContent = `(${r.fieldPath})`;
+        tag.textContent = `(${dicomTag})`;
         tdField.appendChild(document.createTextNode(' '));
         tdField.appendChild(tag);
       }
@@ -425,6 +446,9 @@ export class DicompareReportRenderer {
     const schemaAuthors = schema?.authors || [];
     const schemaDesc = schema?.description?.split('\n')[0] || '';
 
+    // Build schema field lookup: keyword → DICOM tag
+    const fieldMap = this._buildSchemaFieldMap(schema);
+
     let fieldsHtml = '';
     let rulesHtml = '';
     let uncheckedHtml = '';
@@ -442,8 +466,10 @@ export class DicompareReportRenderer {
       if (fieldResults.length > 0) {
         const rows = fieldResults.map(r => {
           const status = this._normalizeStatus(r.status || r.complianceStatus);
+          const keyword = r.fieldName || r.field || '';
+          const dicomTag = fieldMap.get(keyword);
           return `<tr>
-            <td><span class="field-name">${this._escapeHtml(r.fieldName || r.field || '')}</span>${r.fieldPath ? ` <code>${this._escapeHtml(r.fieldPath)}</code>` : ''}</td>
+            <td><span class="field-name">${this._escapeHtml(keyword)}</span>${dicomTag ? ` <code>${this._escapeHtml(dicomTag)}</code>` : ''}</td>
             <td>${this._escapeHtml(this._formatValue(r.expectedValue ?? r.expected))}</td>
             <td>${this._escapeHtml(this._formatValue(r.actualValue ?? r.value))}</td>
             <td class="${status}">${this._escapeHtml(r.message || status)}</td>
@@ -505,6 +531,9 @@ export class DicompareReportRenderer {
       }
     }
 
+    // README / detailed description from schema acquisitions
+    const readmeHtml = this._buildReadmeHtml(schema, schemaName, schemaVersion, schemaAuthors);
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -529,6 +558,7 @@ export class DicompareReportRenderer {
   ${fieldsHtml || '<p>No field checks available.</p>'}
   ${rulesHtml}
   ${uncheckedHtml}
+  ${readmeHtml}
   <div class="print-date">Generated on ${new Date().toLocaleDateString()} by SeedSeg + dicompare</div>
 </body>
 </html>`;
@@ -537,6 +567,95 @@ export class DicompareReportRenderer {
   _escapeHtml(str) {
     const s = String(str ?? '');
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Build the README/detailed description section for the print report.
+   */
+  _buildReadmeHtml(schema, schemaName, schemaVersion, schemaAuthors) {
+    if (!schema?.acquisitions) return '';
+
+    // Collect detailed_description from all acquisitions
+    const descriptions = [];
+    for (const acqData of Object.values(schema.acquisitions)) {
+      if (acqData.detailed_description) {
+        descriptions.push(acqData.detailed_description);
+      }
+    }
+    if (descriptions.length === 0) return '';
+
+    const content = descriptions.join('\n\n');
+    const parsedContent = this._simpleMarkdownToHtml(content);
+
+    const metaHtml = schemaName ? `
+      <div class="readme-meta">
+        <div class="readme-meta-item"><strong>Schema:</strong> ${this._escapeHtml(schemaName)}${schemaVersion ? ` v${this._escapeHtml(schemaVersion)}` : ''}</div>
+        ${schemaAuthors.length > 0 ? `<div class="readme-meta-item"><strong>Authors:</strong> ${schemaAuthors.map(a => this._escapeHtml(a)).join(', ')}</div>` : ''}
+      </div>
+    ` : '';
+
+    return `
+      <div class="readme-section">
+        <h2>Reference Documentation</h2>
+        ${metaHtml}
+        <div class="readme-content">${parsedContent}</div>
+      </div>
+    `;
+  }
+
+  /**
+   * Simple markdown to HTML converter for print reports.
+   * Handles headers, bold, lists, and paragraphs.
+   */
+  _simpleMarkdownToHtml(md) {
+    const lines = md.split('\n');
+    let html = '';
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Headers (demote by 2 levels: ## → h4, ### → h5, etc.)
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headerMatch) {
+        if (inList) { html += '</ul>'; inList = false; }
+        const level = Math.min(headerMatch[1].length + 2, 6);
+        html += `<h${level} class="readme-h${headerMatch[1].length}">${this._inlineMarkdown(headerMatch[2])}</h${level}>`;
+        continue;
+      }
+
+      // List items
+      if (line.match(/^[-*]\s+/)) {
+        if (!inList) { html += '<ul>'; inList = true; }
+        html += `<li>${this._inlineMarkdown(line.replace(/^[-*]\s+/, ''))}</li>`;
+        continue;
+      }
+
+      // Empty line
+      if (line.trim() === '') {
+        if (inList) { html += '</ul>'; inList = false; }
+        continue;
+      }
+
+      // Regular paragraph
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<p>${this._inlineMarkdown(line)}</p>`;
+    }
+
+    if (inList) html += '</ul>';
+    return html;
+  }
+
+  /**
+   * Convert inline markdown (bold, code, links) to HTML.
+   */
+  _inlineMarkdown(text) {
+    let s = this._escapeHtml(text);
+    // Bold
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Inline code
+    s = s.replace(/`(.+?)`/g, '<code>$1</code>');
+    return s;
   }
 
   _getPrintStyles() {
@@ -577,6 +696,19 @@ export class DicompareReportRenderer {
       .unchecked-section { margin-top: 24px; }
       .unchecked-header { color: #666; font-size: 14px; border-bottom: 1px dashed #ccc; }
       .unchecked-table th { background: #f9fafb; }
+      .readme-section { margin-top: 32px; border-top: 2px solid #3b82f6; background: #eff6ff; border-radius: 8px; padding: 20px; }
+      .readme-section > h2 { color: #1e40af; margin-top: 0; margin-bottom: 16px; border-bottom: none; padding-bottom: 0; }
+      .readme-meta { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
+      .readme-meta-item { font-size: 12px; color: #1e40af; margin: 4px 0; }
+      .readme-meta-item strong { color: #1e3a8a; }
+      .readme-content { font-size: 13px; line-height: 1.6; color: #1e3a8a; }
+      .readme-content .readme-h1 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; color: #1e40af; }
+      .readme-content .readme-h2 { font-size: 14px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; color: #1e40af; }
+      .readme-content .readme-h3 { font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 6px; color: #1e40af; }
+      .readme-content p { margin: 8px 0; }
+      .readme-content ul { margin: 8px 0; padding-left: 24px; }
+      .readme-content li { margin: 4px 0; }
+      .readme-content code { background: #dbeafe; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 11px; color: #1e40af; }
       .print-date { color: #999; font-size: 11px; margin-top: 40px; text-align: center; }
       @media print {
         body { padding: 20px; }

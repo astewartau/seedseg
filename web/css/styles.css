@@ -429,6 +429,21 @@ body {
   flex-shrink: 0;
 }
 
+.file-triage-card-preview {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.file-triage-card-preview:hover {
+  color: var(--color-primary);
+}
+
 .file-triage-card-delete:hover {
   color: var(--color-error);
 }

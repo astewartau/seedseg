@@ -417,6 +417,7 @@ class SeedSegApp {
       html += `<div class="file-triage-card" draggable="true" data-bucket="t1w" data-index="${i}">
         <svg class="file-triage-card-grip" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
         <span class="file-triage-card-name" title="${t1w[i].name}">${t1w[i].name}</span>
+        <button class="file-triage-card-preview" data-bucket="t1w" data-index="${i}" title="Preview"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button class="file-triage-card-delete" data-bucket="t1w" data-index="${i}" title="Remove">&times;</button>
       </div>`;
     }
@@ -434,6 +435,7 @@ class SeedSegApp {
       html += `<div class="file-triage-card" draggable="true" data-bucket="other" data-index="${i}">
         <svg class="file-triage-card-grip" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
         <span class="file-triage-card-name" title="${other[i].name}">${other[i].name}</span>
+        <button class="file-triage-card-preview" data-bucket="other" data-index="${i}" title="Preview"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button class="file-triage-card-delete" data-bucket="other" data-index="${i}" title="Remove">&times;</button>
       </div>`;
     }
@@ -493,6 +495,17 @@ class SeedSegApp {
     container.querySelectorAll('.file-triage-card-delete').forEach(btn => {
       btn.addEventListener('click', () => {
         this._removeFromBucket(btn.dataset.bucket, parseInt(btn.dataset.index));
+      });
+    });
+
+    container.querySelectorAll('.file-triage-card-preview').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const bucket = btn.dataset.bucket;
+        const index = parseInt(btn.dataset.index);
+        const file = this._buckets[bucket]?.[index];
+        if (!file) return;
+        await this.viewerController.loadBaseVolume(file);
+        this.syncWindowControls();
       });
     });
 

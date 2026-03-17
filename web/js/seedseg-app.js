@@ -6,11 +6,13 @@
 
 import { FileIOController } from './controllers/FileIOController.js';
 import { DicomController } from './controllers/DicomController.js';
+import { DicompareController } from './controllers/DicompareController.js';
 import { ViewerController } from './controllers/ViewerController.js';
 import { InferenceExecutor } from './controllers/InferenceExecutor.js';
 import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
 import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
+import { DicompareReportRenderer } from './modules/ui/DicompareReportRenderer.js';
 import * as Config from './app/config.js';
 
 class SeedSegApp {
@@ -53,8 +55,15 @@ class SeedSegApp {
 
     this.dicomController = new DicomController({
       updateOutput: (msg) => this.updateOutput(msg),
-      onConversionComplete: (niftiFiles) => this._onDicomConversionComplete(niftiFiles)
+      onConversionComplete: (niftiFiles) => this._onDicomConversionComplete(niftiFiles),
+      onFilesRetained: (files) => this._onDicomFilesRetained(files)
     });
+
+    // dicompare validation
+    this.dicompareController = new DicompareController({
+      updateOutput: (msg) => this.updateOutput(msg)
+    });
+    this.dicompareRenderer = new DicompareReportRenderer();
 
     this.viewerController = new ViewerController({
       nv: this.nv,
@@ -74,6 +83,7 @@ class SeedSegApp {
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
+    this.dicompareModal = new ModalManager('dicompareModal');
 
     // Setup
     await this.setupViewer();
@@ -219,6 +229,12 @@ class SeedSegApp {
     if (privacyBtn) privacyBtn.addEventListener('click', () => this.privacyModal.open());
     const closePrivacy = document.getElementById('closePrivacy');
     if (closePrivacy) closePrivacy.addEventListener('click', () => this.privacyModal.close());
+
+    // dicompare report
+    document.getElementById('dicompareReportBtn')?.addEventListener('click', () => this.runDicompareReport());
+    document.getElementById('closeDicompare')?.addEventListener('click', () => this.dicompareModal?.close());
+    document.getElementById('closeDicompare2')?.addEventListener('click', () => this.dicompareModal?.close());
+    document.getElementById('dicomparePrint')?.addEventListener('click', () => this.printDicompareReport());
   }
 
   _setupUnifiedDropZone() {
@@ -296,7 +312,7 @@ class SeedSegApp {
   _onDicomConversionComplete(niftiFiles) {
     this._showDicomStatus(false);
     if (!niftiFiles || niftiFiles.length === 0) return;
-    this._addFilesToBuckets(niftiFiles);
+    this._addFilesToBuckets(niftiFiles, { fromDicom: true });
   }
 
   _showDicomStatus(show) {
@@ -304,10 +320,16 @@ class SeedSegApp {
     if (el) el.style.display = show ? 'flex' : 'none';
   }
 
-  _addFilesToBuckets(files) {
+  _addFilesToBuckets(files, { fromDicom = false } = {}) {
+    let t1wAssigned = fromDicom ? this._buckets.t1w.length > 0 : true;
     for (const file of files) {
       if (/t1/i.test(file.name)) {
         this._buckets.t1w.push(file);
+        t1wAssigned = true;
+      } else if (fromDicom && !t1wAssigned) {
+        // First file from DICOM conversion defaults to T1w
+        this._buckets.t1w.push(file);
+        t1wAssigned = true;
       } else {
         this._buckets.other.push(file);
       }
@@ -921,6 +943,96 @@ class SeedSegApp {
 
     if (this.inputFile) {
       this.viewerController.loadBaseVolume(this.inputFile);
+    }
+  }
+
+  // ==================== dicompare Integration ====================
+
+  /**
+   * Callback when DICOM files are retained for validation.
+   */
+  async _onDicomFilesRetained(files) {
+    await this.dicompareController.retainDicomFiles(files);
+    const btn = document.getElementById('dicompareReportBtn');
+    if (btn) {
+      btn.disabled = files.length === 0;
+    }
+  }
+
+  /**
+   * Run dicompare validation and display results in modal.
+   */
+  async runDicompareReport() {
+    if (!this.dicompareController.hasFiles()) {
+      this.updateOutput('No DICOM files available for validation.');
+      return;
+    }
+
+    const body = document.getElementById('dicompareModalBody');
+    const footer = document.getElementById('dicompareModalFooter');
+
+    // If results are already cached, just re-display them
+    const cached = this.dicompareController.getCachedResults();
+    if (cached) {
+      this.dicompareModal.open();
+      this.dicompareRenderer.render(body, cached);
+      if (footer) footer.style.display = '';
+      return;
+    }
+
+    // Open modal with loading state
+    this.dicompareModal.open();
+    if (body) {
+      body.innerHTML = `
+        <div class="dicompare-loading">
+          <div class="dicompare-spinner"></div>
+          <p class="dicompare-loading-text" id="dicompareLoadingText">Initializing Python runtime...</p>
+          <div class="dicompare-progress-bar">
+            <div class="dicompare-progress-fill" id="dicompareProgressFill"></div>
+          </div>
+        </div>
+      `;
+    }
+    if (footer) footer.style.display = 'none';
+
+    try {
+      const result = await this.dicompareController.runValidation((progress) => {
+        const textEl = document.getElementById('dicompareLoadingText');
+        const fillEl = document.getElementById('dicompareProgressFill');
+        if (textEl) textEl.textContent = progress.currentOperation;
+        if (fillEl) fillEl.style.width = `${progress.percentage}%`;
+      });
+
+      // Render results
+      this.dicompareRenderer.render(body, result);
+      if (footer) footer.style.display = '';
+    } catch (error) {
+      if (body) {
+        body.innerHTML = `
+          <div class="dicompare-error">
+            <p>Validation failed: ${error.message}</p>
+          </div>
+        `;
+      }
+      console.error('dicompare validation error:', error);
+    }
+  }
+
+  /**
+   * Print the dicompare report in a new window.
+   */
+  printDicompareReport() {
+    if (!this.dicompareController.complianceResults) return;
+    const html = this.dicompareRenderer.generatePrintHtml({
+      acquisitions: this.dicompareController.acquisitions,
+      complianceResults: this.dicompareController.complianceResults,
+      schema: JSON.parse(this.dicompareController.schemaContent || '{}')
+    });
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
     }
   }
 

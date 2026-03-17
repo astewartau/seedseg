@@ -7,6 +7,7 @@
 export class DicomController {
   constructor(options = {}) {
     this.onConversionComplete = options.onConversionComplete || (() => {});
+    this.onFilesRetained = options.onFilesRetained || (() => {});
     this.updateOutput = options.updateOutput || console.log;
     this.dcm2niixModule = null;
     this.converting = false;
@@ -25,6 +26,7 @@ export class DicomController {
     if (!files || files.length === 0) return;
 
     this.converting = true;
+    this.onFilesRetained(files);
     this.updateOutput(`Converting ${files.length} DICOM files...`);
 
     try {
@@ -63,6 +65,7 @@ export class DicomController {
         return;
       }
 
+      this.onFilesRetained(files);
       this.updateOutput(`Converting ${files.length} DICOM files...`);
       const dcm2niix = await this._createInstance();
       const result = await dcm2niix.input(files).run();

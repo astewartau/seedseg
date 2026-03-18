@@ -91,26 +91,40 @@ def select_top_n_markers(probability_map, n_markers=3, threshold=0.1):
 def compute_subject_metrics(pred_seg, targ_seg):
     """Compute marker detection metrics for a single subject.
 
-    Uses binary dilation on both prediction and target before
-    connected component overlap analysis.
+    Uses binary dilation then per-component overlap matching to determine
+    true positives, false negatives, and false positives.
+
+    A predicted component is a TP if it overlaps any target component.
+    A target component is detected (TP) if any predicted component overlaps it.
     """
     structure = np.ones((3, 3, 3), dtype=bool)
 
     pred_marker = scipy.ndimage.binary_dilation((pred_seg == 1).astype(np.int32)).astype(np.int32)
     targ_marker = scipy.ndimage.binary_dilation((targ_seg == 1).astype(np.int32)).astype(np.int32)
 
-    _, pred_n = scipy.ndimage.label(pred_marker, structure=structure)
-    _, targ_n = scipy.ndimage.label(targ_marker, structure=structure)
+    pred_labeled, pred_n = scipy.ndimage.label(pred_marker, structure=structure)
+    targ_labeled, targ_n = scipy.ndimage.label(targ_marker, structure=structure)
 
-    overlap = np.logical_and(pred_marker == targ_marker, pred_marker == 1)
-    _, n_overlap = scipy.ndimage.label(overlap, structure=structure)
+    # For each target component, check if any predicted component overlaps
+    detected_targets = set()
+    matched_preds = set()
+    for t_id in range(1, targ_n + 1):
+        t_mask = (targ_labeled == t_id)
+        overlapping_preds = set(pred_labeled[t_mask]) - {0}
+        if overlapping_preds:
+            detected_targets.add(t_id)
+            matched_preds.update(overlapping_preds)
+
+    tp = len(detected_targets)
+    fn = targ_n - tp
+    fp = pred_n - len(matched_preds)
 
     return {
         'predicted_markers': pred_n,
         'actual_markers': targ_n,
-        'true_positive': n_overlap,
-        'false_negative': targ_n - n_overlap,
-        'false_positive': pred_n - n_overlap,
+        'true_positive': tp,
+        'false_negative': fn,
+        'false_positive': fp,
     }
 
 

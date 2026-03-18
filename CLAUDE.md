@@ -104,14 +104,54 @@ Best-performing approach:
 - Run via: `bash scripts/training/train_production_models.sh` (from project root)
 - Train command: `python scripts/training/train_one_model.py T1 --mode production --data-dir data/train --val-dir data/test/prepared --val-subjects data/val_subjects.txt --seed 42 --output-dir models/production`
 - Models saved to `models/production/`
-- Status (2026-02-19): Seed 42 complete (663 epochs, early stopping). Seeds 123, 456, 789 training/queued.
+- Status (2026-02-20): All 4 seeds trained (early stopping, 600-900 epochs each, ~7h per model on A100)
 
 ## Evaluation Metrics
 
 Connected-component-based with binary dilation:
-- **Sensitivity**: fraction of real markers detected
-- **Precision**: fraction of predicted markers that are real
-- Historical LOOCV performance: ~89% sensitivity, ~82% precision (individual models)
+- **Sensitivity**: fraction of real markers detected (TP / actual markers)
+- **Precision**: fraction of predicted markers that are real (TP / predicted markers)
+- Per-component matching: each predicted component checked for overlap with target components after dilation
+
+### Production Model Performance (4-model consensus, top-3 selection)
+
+| Subset | Subjects | Markers | Sensitivity | Precision | Perfect |
+|--------|----------|---------|-------------|-----------|---------|
+| Validation | 9 | 26 | 96.2% | 96.2% | 8/9 |
+| Test | 25 | 73 | 95.9% | 94.6% | 21/25 |
+| All | 34 | 99 | 96.0% | 95.0% | 29/34 |
+
+Historical LOOCV performance: ~89% sensitivity, ~82% precision (individual models)
+
+### Consensus Strategy Experiments
+
+Tested detection threshold sweeps, adaptive marker count, and hybrid approaches.
+Best alternative: **hybrid top-3 with confidence floor 0.2** (drop predicted markers with mean probability < 0.2):
+
+| Strategy | Val Sens | Val Prec | Test Sens | Test Prec |
+|----------|----------|----------|-----------|-----------|
+| Baseline (top-3, det=0.1) | 96.2% | 96.2% | 95.9% | 94.6% |
+| Top-3, det=0.05 | 96.2% | 96.2% | 97.3% | 96.0% |
+| **Hybrid (top-3, floor=0.2)** | **96.2%** | **100%** | **97.3%** | **96.0%** |
+
+The hybrid approach correctly handles the rare case of <3 markers by dropping low-confidence predictions, while maintaining the top-3 assumption that holds for nearly all patients. Pure adaptive (no marker count cap) has poor precision.
+
+### Model Count Ablation
+
+Consensus with more models progressively improves performance and reduces variability:
+
+| Models | Test Sens (mean±std) | Test Prec (mean±std) | Perfect (mean±std) |
+|--------|---------------------|---------------------|---------------------|
+| 1 | 84.2%±9.2% | 92.0%±2.5% | 15.8±3.6/25 |
+| 2 | 92.2%±4.2% | 92.2%±2.2% | 18.5±2.5/25 |
+| 3 | 95.2%±0.7% | 93.9%±0.7% | 20.5±0.5/25 |
+| **4** | **95.9%** | **94.6%** | **21/25** |
+
+Individual model sensitivity ranges from 74-96%; consensus stabilizes and improves. Biggest gain is 1→2 models (+8% sens). For subsets <4, all combinations tested and mean±std reported.
+
+Evaluate via: `python scripts/evaluation/evaluate_production_models.py --subset test`
+Experiments: `python scripts/evaluation/evaluate_threshold_experiments.py`
+Ablation: `python scripts/evaluation/evaluate_model_count_ablation.py`
 
 ## Key Scripts
 

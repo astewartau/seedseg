@@ -7,15 +7,5 @@ echo "Serving at: http://localhost:$PORT"
 echo "Press Ctrl+C to stop"
 cd "$SCRIPT_DIR"
 
-# Serve with COOP/COEP headers for SharedArrayBuffer (multi-threaded WASM)
-python3 -c "
-import http.server, functools
-
-class CORSHandler(http.server.SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
-        self.send_header('Cross-Origin-Embedder-Policy', 'credentialless')
-        super().end_headers()
-
-http.server.HTTPServer(('', $PORT), CORSHandler).serve_forever()
-"
+# coi-serviceworker.js handles COOP/COEP for SharedArrayBuffer
+python3 -m http.server $PORT

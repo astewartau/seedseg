@@ -6,13 +6,13 @@
 
 import { FileIOController } from './controllers/FileIOController.js';
 import { DicomController } from './controllers/DicomController.js';
-import { DicompareController } from './controllers/DicompareController.js';
+import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
+import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import { ViewerController } from './controllers/ViewerController.js';
 import { InferenceExecutor } from './controllers/InferenceExecutor.js';
 import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
 import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
-import { DicompareReportRenderer } from './modules/ui/DicompareReportRenderer.js';
 import * as Config from './app/config.js';
 
 class SeedSegApp {
@@ -61,6 +61,7 @@ class SeedSegApp {
 
     // dicompare validation
     this.dicompareController = new DicompareController({
+      schemaUrl: 'https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json',
       updateOutput: (msg) => this.updateOutput(msg)
     });
     this.dicompareRenderer = new DicompareReportRenderer();

@@ -30,3 +30,6 @@ web/models/
 web/wasm/ort*
 web/wasm/qsm_wasm*
 web/node_modules/
+
+# One-off lookup lists
+subject_ids_for_age_lookup.txt

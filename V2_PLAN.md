@@ -5,7 +5,19 @@ preprint (bioRxiv 10.64898/2026.06.18.733061). The approach has four parts:
 fix the reference labels, retrain with nnU-Net, add physics-simulated markers,
 and evaluate with cross-validation over all 127 subjects.
 
-Last updated: 2026-10-16 (Claude session on bun154).
+Last updated: 2026-10-17 07:05 (scheduled mid-run check, job 29940932 on bun150).
+
+## Needs Ashley
+
+- *(Not urgent, FYI.)* In every fold so far, the marker pseudo-Dice and the
+  validation loss are best at about epoch 120–250. After that they drift down
+  slowly while the train loss keeps falling: mild overfitting. For example,
+  marker Dice in 511 fold 0 is 0.77 at epochs 120–130 and 0.73 at 472–482; in 501
+  it is about 0.56 at epoch 250 and about 0.55 at 1000. `predict.slurm` uses
+  `checkpoint_final` (the nnU-Net default). That is the unbiased choice, because
+  `checkpoint_best` is picked on the held-out fold itself. I've changed nothing.
+  Decide after the main result whether a shorter schedule (e.g. 250–500 epochs)
+  is worth a follow-up arm.
 
 ## Why (diagnosis, 2026-10-16)
 
@@ -32,7 +44,7 @@ The released 4-model ensemble reproduces the preprint (test 70/73 sensitivity,
 |---|---|---|---|
 | 1 | Rebuild labels from DICOM, refine on MR voids, QC | **Done**; methods draft written | `scripts/labels/` (README = methods), branch `v2-labels` |
 | 2 | Centroid-matching evaluation (5 mm, one-to-one, CIs) | **Done** | `scripts/evaluation/evaluate_detections.py` |
-| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **Queued on GPU** (nothing has trained yet) | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
+| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **Training**: 501 folds 0–3 done, fold 4 running; 511 folds 0–2 running (status 2026-10-17 07:00) | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
 | 4 | Physics-based synthetic markers and distractors | **Done and validated**; 254 cases generated | `scripts/synth/` (README = methods), worktree `seedseg-synth`, branch `v2-synth` |
 | 5 | Second-stage candidate re-ranker | **Code done**; no gain on the old models' candidates (not a fair test) | `scripts/rerank/rerank.py` |
 | 6 | Write-up (methods/results) | Not started | – |
@@ -54,7 +66,16 @@ Fold assignment is fixed in `scripts/nnunet/splits/` and shared by all variants.
 
 - All jobs run on H100 (`a_ai_collab`, `gpu_cuda`), with a 72 h limit per fold.
 - Only 4 GPU jobs run at once per user.
-- The estimate is about 1–2 days per fold. The smoke test gives the real figure.
+- **Measured: about 27–29 s per epoch, so about 8 h per 1000-epoch fold.** The smoke test
+  (29913696) gave 26.9 s; the 501 folds took 7 h 53 m to 8 h 10 m.
+- **ETAs (as of 2026-10-17 07:00, with 4 GPU slots and about 8 h per fold):**
+  - 501: fold 4 finishes about 10:40 Sat 17 Oct; its export follows.
+  - 511: folds 0–2 finish about 11:00–11:20 Sat; folds 3–4 about 19:00 Sat; export after that.
+  - 512: about 11:00 Sat to about 03:00 Sun.
+  - 513: about 19:00 Sat to about 11:00 Sun.
+  - 521 (niced, runs last): about 11:00 Sun to about 03:00 Mon 19 Oct.
+
+  These assume the queue starts each job promptly; partition waits add to them.
 - If a job dies, resubmitting it resumes from `checkpoint_latest`; see `train.slurm`.
 
 The corrected datasets (511/512/513) were rebuilt and re-queued on 2026-10-16 at
@@ -141,8 +162,10 @@ When all 5 folds of a dataset have `checkpoint_final.pth`:
   after training finishes**; it picks up the trained models (checkpoint_final and
   plans). Nothing is pushed to GitHub, because the records hold patient study IDs
   and the repo is public.
-- **Smoke test.** When 29913696 runs, check the epoch time and the orientation
-  check in `export_probs.py`, and update the ETAs above.
+- **Smoke test: done.** 29913696 completed on 16 Oct (6 min, 26.9 s per epoch; the
+  first epoch takes 140 s because of compile/warm-up). It was a training-only run,
+  so the orientation check in `export_probs.py` hasn't run yet. It first runs
+  with the 501 export (29934246); the main_end check should look at it.
 - **Synthetic slice extent.** Real voids span about 4 slices, simulated about 3.
   The likely cause is the idealised boxcar slice profile. Only revisit this if
   513 beats 511.
@@ -162,3 +185,23 @@ Launcher `scripts/monitor/claude_check.slurm` (tmux + Remote Control, opus-5-5 /
 | final_end | 29940934 | `afterany` 512 (29929995), 513 (29929997), 521 (29915718) |
 Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push delivered. `/home/uqaste15` marked trusted in `~/.claude.json` for this.
 521 train (29915718) given `nice=100` on 2026-10-16 so 511/512/513 run first; 521 trains last (expected to finish ~Mon 19 Oct).
+
+## Mid-run check, 2026-10-17 07:00 (job 29940932): healthy
+
+- **Jobs.** 501 folds 0–3 COMPLETED (each about 8 h, `checkpoint_final` present).
+  Running: 501 fold 4 (about epoch 545) and 511 folds 0, 1, 2 (about epochs 482, 472, 447).
+  Pending on the per-user limit: 511 folds 3–4, and all of 512, 513 and 521.
+  All exports and the main_end/final_end checks are pending on their dependencies.
+- **Errors.** The `.err` files are empty, apart from the expected cancellation of
+  29915715. There are no NaNs in any training log.
+- **Losses.** The train loss falls steadily in every fold. Values at the last epoch:
+
+  | Run | Train loss | Val loss | Marker pseudo-Dice |
+  |---|---|---|---|
+  | 501 folds 0–3 | about −0.94 | −0.49 to −0.64 | 0.49–0.56 |
+  | 511 folds 0–2 | about −0.82 | about −0.72 to −0.74 | 0.73–0.75 |
+
+  The 511 folds are clearly above the 501 folds at the same epoch. Validation
+  plateaued early (see Needs Ashley).
+- **Actions.** None needed: no resubmissions, no extra checks queued. The
+  scheduled main_end check (29940933) and final_end check (29940934) still stand.

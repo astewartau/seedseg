@@ -77,7 +77,11 @@ def main():
     for sid in subs:
         img = nib.load(os.path.join(a.probs, f'{sid}.nii.gz'))
         p = np.asarray(img.dataobj, np.float32); z = np.array(img.header.get_zooms()[:3], float)
-        ref = np.array(json.load(open(os.path.join(a.root, 'labelfix', 'refined', f'{sid}.json')))['markers_final_vox']) * z
+        rec = json.load(open(os.path.join(a.root, 'labelfix', 'refined', f'{sid}.json')))
+        allref = np.array(rec['markers_final_vox']) * z
+        excl = set(rec.get('excluded', []))  # markers rejected at human QC
+        ref = np.array([r for i, r in enumerate(allref) if i not in excl]).reshape(-1, 3)
+        exref = np.array([r for i, r in enumerate(allref) if i in excl]).reshape(-1, 3)
         cs = candidates(p, z, a.threshold)
         cpos = np.array([[c['x'], c['y'], c['z']] for c in cs]) * z if cs else np.zeros((0, 3))
         # candidate-level truth (for the re-ranker): nearest reference within tol
@@ -91,9 +95,11 @@ def main():
         for r_, i in enumerate(sorted(range(len(cs)), key=lambda i: cs[i][key], reverse=True)):
             cs[i]['rank'] = r_ + 1
         kept = cpos[order] if order else np.zeros((0, 3))
+        if len(exref):  # detections on an excluded marker count neither way
+            kept = kept[[np.linalg.norm(exref - q, axis=1).min() > a.tol_mm for q in kept]] if len(kept) else kept
         m, _ = match(kept, ref, a.tol_mm)
         tp = len(m); fn = len(ref) - tp; fp = len(kept) - tp
-        per.append(dict(subject=sid, n_ref=len(ref), n_det=len(kept), n_cand=len(cs), tp=tp, fn=fn, fp=fp,
+        per.append(dict(subject=sid, n_excluded=len(exref), n_ref=len(ref), n_det=len(kept), n_cand=len(cs), tp=tp, fn=fn, fp=fp,
                         perfect=(fn == 0 and fp == 0), loc_err_mm=float(np.mean([d for _, _, d in m])) if m else np.nan))
         cands_all += cs
     P = pd.DataFrame(per); C = pd.DataFrame(cands_all)

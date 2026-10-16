@@ -57,7 +57,7 @@ DEFAULTS = dict(
     boundary_band=(1.5, 4.0),  # mm from the gland edge for 'boundary' context
     bright_factor=1.6, bright_dist=4.0,  # 'bright' = within 4 mm of voxel > 1.6 x CTV median
     calc_diam=(0.5, 3.0),      # mm equivalent diameter
-    calc_dchi_dia=(-10.0, -1.0), calc_dchi_para=(1.0, 10.0),  # ppm (log-uniform magnitude)
+    calc_dchi_dia=(-5.0, -1.0), calc_dchi_para=(1.0, 10.0),  # ppm (log-uniform magnitude)
     p_paramagnetic=0.25,
     calc_rho_dia=(0.0, 0.3), calc_rho_para=(0.3, 1.0),
     calc_min_dist_marker=6.0,  # mm from synthetic marker centres and real marker voxels

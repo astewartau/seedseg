@@ -161,3 +161,4 @@ Launcher `scripts/monitor/claude_check.slurm` (tmux + Remote Control, opus-5-5 /
 | main_end | 29940933 | `afterany` 511 train (29929993) + 501 train (29915716) |
 | final_end | 29940934 | `afterany` 512 (29929995), 513 (29929997), 521 (29915718) |
 Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push delivered. `/home/uqaste15` marked trusted in `~/.claude.json` for this.
+521 train (29915718) given `nice=100` on 2026-10-16 so 511/512/513 run first; 521 trains last (expected to finish ~Mon 19 Oct).

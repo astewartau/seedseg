@@ -21,7 +21,7 @@ synthetic cases of temporal-test subjects are skipped altogether.
 
 Dataset IDs: 500 + 10 * VARIANT_INDEX[variant] + DESIGN_CODE[design(+syn)]
   e.g. original -> 501 cvall, 502 temporal, 503 cvall+syn, 504 temporal+syn
-       corrected -> 511, 512, 513, 514
+       corrected -> 511, 512, 513, 514; original_sphere -> 521, 522, 523, 524
 New variants must be appended to VARIANT_INDEX (never reorder it).
 
 Usage
@@ -49,7 +49,7 @@ NNUNET_ROOT = ROOT / "nnunet"
 N_FOLDS = 5
 SEED = 0
 
-VARIANT_INDEX = {"original": 0, "corrected": 1}  # append only
+VARIANT_INDEX = {"original": 0, "corrected": 1, "original_sphere": 2}  # append only
 DESIGN_CODE = {("cvall", False): 1, ("temporal", False): 2,
                ("cvall", True): 3, ("temporal", True): 4}
 DESIGN_NAME = {"cvall": "SeedSegCvAll", "temporal": "SeedSegTemporal"}

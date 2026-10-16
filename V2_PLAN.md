@@ -101,7 +101,13 @@ ls /scratch/user/uqaste15/prostate-v2/nnunet/nnUNet_results/*/*/fold_*/checkpoin
 ```
 
 When all 5 folds of a dataset have `checkpoint_final.pth`:
-1. `cd /scratch/user/uqaste15/src/seedseg-nnunet && sbatch --export=ALL,DATASET=<id> scripts/nnunet/predict.slurm`.
+1. Probability export is **already queued** and starts automatically when each
+   training array finishes:
+   - 501 → 29934246, 511 → 29934247, 513 → 29934248, 521 → 29934249 (CPU);
+   - 512 → 29934250 (GPU, because it also predicts the 25 test subjects).
+
+   If one is cancelled (it won't start if any fold failed), re-run it by hand:
+   `cd /scratch/user/uqaste15/src/seedseg-nnunet && sbatch --export=ALL,DATASET=<id> scripts/nnunet/predict.slurm`.
    This writes per-subject probability maps from the held-out folds; see `scripts/nnunet/README.md`.
 2. Evaluate against the corrected references (for every arm):
    `python scripts/evaluation/evaluate_detections.py --probs <marker_prob dir> --root /scratch/user/uqaste15/prostate-v2 --subjects /scratch/user/uqaste15/prostate-v2/subjects.txt --out <prefix>`

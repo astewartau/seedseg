@@ -158,15 +158,15 @@ def build(args):
     syn_cases = {}
     if syn:
         sdir = ROOT / "synthetic" / variant
-        pat = re.compile(r"^(?P<sid>.+)_syn(?P<k>\d+)\.nii$")
-        for p in sorted((sdir / "images").glob("*_syn*.nii")):
+        pat = re.compile(r"^(?P<sid>.+)_syn(?P<k>\d+)\.nii(\.gz)?$")
+        for p in sorted((sdir / "images").glob("*_syn*.nii*")):
             m = pat.match(p.name)
             if not m:
                 continue
             sid = m["sid"]
             if sid not in folds:  # test subject, excluded subject, or unknown
                 continue
-            cid = p.name[:-4]
+            cid = p.name.split(".nii")[0]
             lab = sdir / "labels" / f"{cid}.nii.gz"
             if not lab.exists():
                 print(f"warning: no label for synthetic {cid}; skipped")

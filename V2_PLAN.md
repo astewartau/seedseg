@@ -45,17 +45,21 @@ Fold assignment is fixed in `scripts/nnunet/splits/` and shared by all variants.
 
 | Dataset | Labels | Design | Purpose | Slurm job (2026-10-16) |
 |---|---|---|---|---|
-| 511 | corrected | 5-fold CV, all 127 | **main result** | 29915715 |
+| 511 | corrected | 5-fold CV, all 127 | **main result** | preprocess 29929992, then train 29929993 |
 | 501 | original | 5-fold CV, all 127 | label-fix ablation | 29915716 |
-| 512 | corrected | temporal (102 train/val, 25 test) | comparison with the preprint split | 29915717 |
+| 512 | corrected | temporal (102 train/val, 25 test) | comparison with the preprint split | preprocess 29929994, then train 29929995 |
 | 521 | original_sphere | 5-fold CV | shape vs position control | 29915718 |
-| 513 | corrected + 254 synthetic | 5-fold CV | synthetic-data arm | preprocess 29925248, then train 29925249 |
+| 513 | corrected + 254 synthetic | 5-fold CV | synthetic-data arm | preprocess 29929996, then train 29929997 |
 | – | 501, fold 0, 5 epochs | smoke test | per-epoch time, export check | 29913696 |
 
 - All jobs run on H100 (`a_ai_collab`, `gpu_cuda`), with a 72 h limit per fold.
 - Only 4 GPU jobs run at once per user.
 - The estimate is about 1–2 days per fold. The smoke test gives the real figure.
 - If a job dies, resubmitting it resumes from `checkpoint_latest`; see `train.slurm`.
+
+The corrected datasets (511/512/513) were rebuilt and re-queued on 2026-10-16 at
+about 18:30, after human QC; the earlier jobs 29915715/29915717/29925249 were
+cancelled. 501 started training at about 18:25.
 
 ## Baseline numbers for the new evaluation (released models vs corrected labels, 5 mm matching)
 
@@ -117,12 +121,20 @@ When all 5 folds of a dataset have `checkpoint_final.pth`:
 
 ## Open decisions / to do
 
-- **Human QC of the labels.** Ashley needs to review the 66 flagged markers in
-  `labelfix/qc/flagged_*.png` (so far only Claude has); record the outcome in
-  `labelfix/qc_decisions.csv`.
-- **Backup or push.** Nothing is pushed. The label records contain patient study
-  IDs, and the repo is public. Back up `prostate-v2/` and the worktrees to RDM
-  (Q0748) before scratch purges them, or push the code without `scripts/labels/records/`.
+- **Human QC of the labels: done (2026-10-16, AS).** Of the 66 flagged markers,
+  only z3278008 marker 1 was rejected: no MR void at the CT-confirmed seed
+  position. It carries the nnU-Net ignore label (3) and is excluded from
+  evaluation (`scripts/labels/apply_qc_exclusions.py`, `records/qc_exclusions.csv`).
+  The baseline on all 127 is now 342/377. Unflagged markers didn't need a
+  human check. Note for the methods: the constellation-shape check only
+  validates markers that were snapped to a void; the 17 low-void markers were
+  covered by the visual QC instead.
+- **Backup.** `scripts/backup_v2_to_rdm.sh` writes dated snapshots to
+  `/QRISdata/Q0748/data/prostate/v2-work/`: a data tar, a git bundle of all
+  branches, and this plan. The first snapshot was taken on 2026-10-16. **Re-run it
+  after training finishes**; it picks up the trained models (checkpoint_final and
+  plans). Nothing is pushed to GitHub, because the records hold patient study IDs
+  and the repo is public.
 - **Smoke test.** When 29913696 runs, check the epoch time and the orientation
   check in `export_probs.py`, and update the ETAs above.
 - **Synthetic slice extent.** Real voids span about 4 slices, simulated about 3.

@@ -11,7 +11,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --mem=96G
 #SBATCH --time=72:00:00
 #SBATCH --account=a_ai_collab

@@ -54,6 +54,9 @@ DESIGN_CODE = {("cvall", False): 1, ("temporal", False): 2,
                ("cvall", True): 3, ("temporal", True): 4}
 DESIGN_NAME = {"cvall": "SeedSegCvAll", "temporal": "SeedSegTemporal"}
 LABELS = {"background": 0, "marker": 1, "prostate": 2}
+# Markers rejected at human QC carry the nnU-Net ignore label (must be the highest value)
+IGNORE = 3
+SEEN_IGNORE = []
 
 
 def dataset_id(variant, design, synthetic=False):
@@ -111,7 +114,10 @@ def write_image(src, dst):
 def write_label(src, dst, ref_img):
     lab = nib.load(str(src))
     data = np.rint(np.asarray(lab.dataobj, dtype=np.float32)).astype(np.uint8)
-    bad = set(np.unique(data)) - set(LABELS.values())
+    vals = set(np.unique(data))
+    if IGNORE in vals:
+        SEEN_IGNORE.append(str(src))
+    bad = vals - set(LABELS.values()) - {IGNORE}
     if bad:
         raise ValueError(f"{src}: unexpected label values {bad}")
     ref = nib.load(str(ref_img))
@@ -189,7 +195,7 @@ def build(args):
     n_tr = len(folds) + sum(len(v) for v in syn_cases.values())
     dataset_json = {
         "channel_names": {"0": "T1"},
-        "labels": LABELS,
+        "labels": {**LABELS, **({"ignore": IGNORE} if SEEN_IGNORE else {})},
         "numTraining": n_tr,
         "file_ending": ".nii.gz",
         "name": name,

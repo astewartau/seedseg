@@ -1,6 +1,6 @@
 You are a scheduled mid-run health check for the SeedSeg v2 prostate project. Read `/scratch/user/uqaste15/src/seedseg/V2_PLAN.md` first. It has the plan, the dataset IDs and the job IDs.
 
-Task: the main nnU-Net run (dataset 511, corrected labels) started about 24 h ago. Check that training is healthy across all running nnU-Net datasets (501, 511, 512, 513, 521):
+Task: the main nnU-Net run (dataset 511, corrected labels) started a few hours ago (fold 0 is about halfway; other folds may still be queued behind the 4-GPU limit). Check that training is healthy across all running nnU-Net datasets (501, 511, 512, 513, 521):
 - job states (`sacct` / `squeue`);
 - errors in `/scratch/user/uqaste15/prostate-v2/logs/nnunet_train_*`;
 - for each running fold, the training log under `nnUNet_results/<dataset>/*/fold_*/training_log_*.txt`: epochs completed, epoch time, train and validation loss falling, pseudo-Dice for the marker class rising, no NaNs.

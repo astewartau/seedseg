@@ -157,7 +157,7 @@ When all 5 folds of a dataset have `checkpoint_final.pth`:
 Launcher `scripts/monitor/claude_check.slurm` (tmux + Remote Control, opus-5-5 / medium effort, auto mode); prompts in `scripts/monitor/prompts/`. Each session appears in claude.ai/code as `seedseg-<check>-<date>` and push-notifies when done.
 | Check | Job | Trigger |
 |---|---|---|
-| midrun | 29940932 | 24 h after 511 fold 0 starts (`after:29929993_0+1440`), 6 h wall |
+| midrun | 29940932 | 4 h after 511 fold 0 starts (`after:29929993_0+240`), 6 h wall |
 | main_end | 29940933 | `afterany` 511 train (29929993) + 501 train (29915716) |
 | final_end | 29940934 | `afterany` 512 (29929995), 513 (29929997), 521 (29915718) |
 Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push delivered. `/home/uqaste15` marked trusted in `~/.claude.json` for this.

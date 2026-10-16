@@ -63,7 +63,8 @@ DEFAULTS = dict(
     calc_min_dist_marker=6.0,  # mm from synthetic marker centres and real marker voxels
     sphere_radius=3.0,         # mm, label sphere for synthetic markers
     footprint_thr=0.5,         # |A| threshold for 'footprint' label mode
-    n_coils=10, noise_corr=(0.38, 0.22),
+    n_coils=(6, 14),           # effective channels, uniform integer per case (calibrate_noise.py)
+    noise_corr=(0.38, 0.22),
 )
 
 
@@ -173,6 +174,8 @@ def make_case(sid, k, variant, seed, out_root, label_mode, acq_overrides, P):
     grid = Grid()
     maps, ref = candidate_maps(img, lab, vox, P)
     sigma = R.local_noise_sigma(img, ndi.binary_dilation(lab == 2, iterations=3))
+    nc = P["n_coils"]
+    n_coils = int(rng.integers(nc[0], nc[1] + 1)) if isinstance(nc, (list, tuple)) else int(nc)
 
     # ---- synthetic markers ----
     n_m = int(rng.integers(P["n_markers"][0], P["n_markers"][1] + 1))
@@ -216,7 +219,7 @@ def make_case(sid, k, variant, seed, out_root, label_mode, acq_overrides, P):
 
     specs = markers + calcs
     out, A, infos = insert_sources(img, specs, acq, grid, sigma, rng,
-                                   noise_corr=tuple(P["noise_corr"]), n_coils=P["n_coils"])
+                                   noise_corr=tuple(P["noise_corr"]), n_coils=n_coils)
 
     # ---- labels ----
     new_lab = lab.copy()
@@ -249,7 +252,7 @@ def make_case(sid, k, variant, seed, out_root, label_mode, acq_overrides, P):
     rec = dict(case=name, subject=sid, k=int(k), variant=variant, seed=int(seed), seed_entropy=str(entropy),
                label_mode=label_mode, git=git_rev(), acquisition=acq.to_dict(),
                grid=dataclasses.asdict(grid), noise=dict(sigma=float(sigma), ctv_median=float(ref),
-                                                         n_coils=P["n_coils"], corr=list(P["noise_corr"])),
+                                                         n_coils=n_coils, corr=list(P["noise_corr"])),
                params={k_: (list(v) if isinstance(v, tuple) else v) for k_, v in P.items()},
                markers=markers, calcs=calcs, runtime_s=time.time() - t0)
     with open(f"{out_root}/params/{name}.json", "w") as f:

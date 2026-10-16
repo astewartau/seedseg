@@ -50,7 +50,7 @@ def parse_sets(sets):
         except json.JSONDecodeError:
             pass
         if k == "n_coils":
-            acq_kw["_n_coils"] = int(v)
+            acq_kw["_n_coils"] = tuple(int(x) for x in v) if isinstance(v, list) else int(v)
         elif k == "noise_scale":
             nscale = float(v)
         elif k == "noise_corr":
@@ -115,6 +115,8 @@ def sim_one(task):
     n_coils = acq_kw.pop("_n_coils", N_COILS)
     acq = Acquisition(b0_dir=tuple(b0_dir_voxel_frame(s["affine"])), **acq_kw)
     rng = np.random.default_rng(seed)
+    if isinstance(n_coils, tuple):  # per-simulation effective channel count, uniform integer
+        n_coils = int(rng.integers(n_coils[0], n_coils[1] + 1))
     spec = dict(type="marker", center_vox=list(map(float, center)),
                 axis=list(axis_from_angles(theta, az, acq.b0_dir)), dchi_ppm=float(dchi))
     out, A, info = insert_sources(s["img"], [spec], acq, Grid(), nscale * s["sigma"], rng,

@@ -57,8 +57,10 @@ exact when their perturbations do not overlap; the placement rules ensure that.
 **Insertion and noise.** The images are multi-channel magnitude reconstructions.
 Signal-free regions such as rectal gas sit at 3.6–5 × the tissue noise SD rather than
 the Rician 1.25 ×. Their SD is ≈ 0.7 × the tissue SD (`noise_calibration.json`). Both
-match a sum-of-squares noise floor (non-central χ with 2N degrees of freedom), with
-N_eff ≈ 10. A Rician floor would make simulated voids far too dark: the real void floor
+match a sum-of-squares noise floor (non-central χ with 2N degrees of freedom). In the
+21 purest gas regions (floor SD < 0.85 × tissue SD) the per-subject effective channel
+count N_eff spans ≈ 6.7–15 (median ≈ 12); N is therefore drawn per case as a uniform
+integer in [6, 14] and recorded in the case JSON. A Rician floor would make simulated voids far too dark: the real void floor
 is ≈ 0.34 × the CTV median, while Rician noise would put it at ≈ 0.10. The synthetic
 magnitude is therefore formed in the power domain:
 
@@ -73,7 +75,7 @@ floor follows the scanner's noise-floor distribution. Output images keep the sou
 int16 storage (with NIfTI scaling), so quantisation gives no cue for synthetic regions.
 
 **Distractors.** 0–4 per case, inside the prostate. 75 % are diamagnetic, with
-Δχ log-uniform in [−10, −1] ppm and ρ_src ∈ [0, 0.3] (calcification). 25 % are
+Δχ log-uniform in [−5, −1] ppm and ρ_src ∈ [0, 0.3] (calcification). 25 % are
 paramagnetic, with Δχ log-uniform in [+1, +10] ppm and ρ_src ∈ [0.3, 1] (blood-product
 foci). They keep the label of the voxel they replace (background or prostate). They are
 at least 6 mm from synthetic marker centres and at least 3 mm from real-marker label voxels.
@@ -107,17 +109,22 @@ That gives a per-void posterior over (θ, Δχ); the pooled posterior defines th
 generation prior. A fresh set of 361 simulations drawn from that prior was then
 compared with the real set.
 
-Results (`metrics_final.json`, `fig_*_final.png`; medians, real vs simulated):
+Results (`metrics_ncoilvar.json`, `fig_*_ncoilvar.png`: per-case N ∈ [6, 14]; medians
+[IQR], real vs simulated). The earlier fixed-N = 10 run is kept as `*_final`.
 
-| | real | simulated | KS p |
-|---|---|---|---|
-| min intensity / CTV median | 0.34 [0.29–0.39] | 0.33 [0.30–0.36] | < 0.001 |
-| void volume (mm³, < 0.6) | 41.6 [33–55] | 43.5 [30–57] | 0.12 |
-| in-plane elongation | 1.19 [1.11–1.30] | 1.18 [1.11–1.28] | 0.76 |
-| slices with void | 4 [3–4] | 3 [3–4] | 0.08 |
-| void area per slice (mm², −2…+2 slices) | 0, 4.3, 9.5, 5.2, 0.5 | 0, 3.3, 9.9, 4.3, 0 | |
+| | real | simulated (N 6–14) | KS p | simulated (N = 10) | KS p |
+|---|---|---|---|---|---|
+| min intensity / CTV median | 0.34 [0.29–0.39] | 0.33 [0.29–0.38] | 0.08 | 0.33 [0.30–0.36] | < 0.001 |
+| void volume (mm³, < 0.6) | 41.6 [33–55] | 43.5 [29–57] | 0.02 | 43.5 [30–57] | 0.12 |
+| in-plane elongation | 1.19 [1.11–1.30] | 1.18 [1.12–1.29] | 0.64 | 1.18 [1.11–1.28] | 0.76 |
+| slices with void | 4 [3–4] | 3 [3–4] | 0.06 | 3 [3–4] | 0.08 |
+| void area per slice (mm², −2…+2 slices) | 0, 4.3, 9.5, 5.2, 0.5 | 0, 3.3, 9.9, 4.3, 0 | | 0, 3.3, 9.9, 4.3, 0 | |
 
-The RMS difference of the median per-slice radial profiles is 0.034 (in CTV-median units).
+Varying N per case widens the simulated void-floor distribution to the real one. The
+volume medians and IQRs are unchanged; the lower volume KS p reflects the fresh random
+matched set drawn in each run.
+
+The RMS difference of the median per-slice radial profiles is 0.033 (0.034 with fixed N), in CTV-median units.
 
 * The orientation likelihood is weak. Voids at 0.69 × 0.69 × 2 mm with this noise floor
   barely encode marker orientation. The pooled posterior is roughly flat over 0–60° and
@@ -136,9 +143,9 @@ The RMS difference of the median per-slice radial profiles is 0.034 (in CTV-medi
   marker, where the signal is already dephased, and the mean real void shows no
   readout-direction pile-up. The readout bandwidth is unknown, so the effect is off by
   default (`--set readout_axis=0 --set bw_px=…`).
-* Known mismatches: (i) the simulated void-floor distribution is narrower than the real
-  one, because a single N_eff and a per-subject scalar σ are used, while the real
-  floors vary between and within subjects; (ii) real voids extend slightly further in z
+* Known mismatches: (i) σ is a per-subject scalar, so within-subject variation of the
+  noise floor is not modelled (between-case variation is, through N); (ii) real voids
+  extend slightly further in z
   (4 vs 3 slices); (iii) real voids sit on heterogeneous tissue and sometimes on other
   structures, and the simulated backgrounds are random marker-free prostate locations.
 
@@ -158,8 +165,8 @@ $PY scripts/synth/generate.py --subjects all --variant corrected --k 2 --seed 0
 # options: --label-mode footprint, --set readout_axis=0 --set bw_px=250, --param n_markers=[2,3]
 # validation and figures
 $PY scripts/synth/calibrate_noise.py
-$PY scripts/synth/validate.py --variant final --set rf_bw=1300 --set sign_ss=1
-$PY scripts/synth/figures.py --variant final
+$PY scripts/synth/validate.py --variant ncoilvar --set rf_bw=1300 --set sign_ss=1 --set 'n_coils=[6,14]'
+$PY scripts/synth/figures.py --variant ncoilvar
 $PY scripts/synth/test_physics.py
 ```
 

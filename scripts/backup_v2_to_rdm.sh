@@ -9,7 +9,7 @@ set -euo pipefail
 R=/scratch/user/uqaste15/prostate-v2
 REPO=/scratch/user/uqaste15/src/seedseg
 DEST=/QRISdata/Q0748/data/prostate/v2-work
-STAMP=$(date +%Y%m%d-%H%M)
+STAMP=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$DEST"
 cd "$R"
 files=(labels labelfix synthetic eval/results splits_original.json subjects.txt)

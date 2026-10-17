@@ -5,10 +5,21 @@ preprint (bioRxiv 10.64898/2026.06.18.733061). The approach has four parts:
 fix the reference labels, retrain with nnU-Net, add physics-simulated markers,
 and evaluate with cross-validation over all 127 subjects.
 
-Last updated: 2026-10-17 07:05 (scheduled mid-run check, job 29940932 on bun150).
+Last updated: 2026-10-17 ~19:50 (scheduled main_end check, job 29940933 on bun156).
 
 ## Needs Ashley
 
+- **511 misses 15 clear voids outright, and 8 of them are found by 501 (main_end check, 2026-10-17).**
+  The label fix does not help on test25: 511 gets 67/74, 501 gets 71/74. Of 511's 7 test misses,
+  5 are markers with marker probability below 0.1 everywhere within 5 mm, and 4 of those 5 are detected
+  at p ≈ 1 by 501 (z0008611 m2, z0324733 m0, z1623770 m2, z6031238 m0). All 15 of these markers have
+  void strength 0.43–0.75 and are correctly labelled in 511 `labelsTr` (about 115 marker voxels each).
+  Each is in a 3-marker subject where 511 output only 2 components. The misses are spread over all
+  5 folds. Many of them (not all) lie at or just outside the CTV edge. Seven of the 15 are also missed
+  by 501, so there is a shared hard set. Montage: `prostate-v2/eval/analysis/misses_511_nocand.png`.
+  Table: `misses_511_501.csv`. I haven't changed anything. This needs a proper look before 511 is
+  declared the main model: check whether the corrected CTV/marker rasterisation teaches "dark void at
+  the prostate edge = prostate/background", and look at these voids by eye.
 - *(Not urgent, FYI.)* In every fold so far, the marker pseudo-Dice and the
   validation loss are best at about epoch 120–250. After that they drift down
   slowly while the train loss keeps falling: mild overfitting. For example,
@@ -44,9 +55,9 @@ The released 4-model ensemble reproduces the preprint (test 70/73 sensitivity,
 |---|---|---|---|
 | 1 | Rebuild labels from DICOM, refine on MR voids, QC | **Done**; methods draft written | `scripts/labels/` (README = methods), branch `v2-labels` |
 | 2 | Centroid-matching evaluation (5 mm, one-to-one, CIs) | **Done** | `scripts/evaluation/evaluate_detections.py` |
-| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **Training**: 501 folds 0–3 done, fold 4 running; 511 folds 0–2 running (status 2026-10-17 07:00) | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
+| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **501 and 511 done and evaluated** (2026-10-17; see results below); 512/513/521 training | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
 | 4 | Physics-based synthetic markers and distractors | **Done and validated**; 254 cases generated | `scripts/synth/` (README = methods), worktree `seedseg-synth`, branch `v2-synth` |
-| 5 | Second-stage candidate re-ranker | **Code done**; no gain on the old models' candidates (not a fair test) | `scripts/rerank/rerank.py` |
+| 5 | Second-stage candidate re-ranker | **Evaluated on 511 OOF candidates: no net gain** (all 127: +2/−2 markers, FP 9→9) | `scripts/rerank/rerank.py` |
 | 6 | Write-up (methods/results) | Not started | – |
 
 ## Experiment arms (nnU-Net)
@@ -89,6 +100,77 @@ cancelled. 501 started training at about 18:25.
 | Test (25) | 70/74 | 70/75 | 20/25 |
 | Val (9) | 25/27 | 25/26 | 7/9 |
 | All 127 (partly in-sample for the old models) | 342/378 (90.5%) | 342/377 | 93/127 |
+
+## Results: 511 vs 501 (main_end check, 2026-10-17)
+
+The nnU-Net predictions are out-of-fold (OOF): each subject is predicted only by the fold model that
+did not train on it. All evaluation is against the corrected references, using 5 mm one-to-one
+matching, threshold 0.1, top 3 per subject by mean probability. The CIs are 95% Clopper-Pearson.
+"Released" is the 4-model ONNX ensemble. Its all-127 row is **partly in-sample** (the old models
+trained on most of these subjects), so that comparison is biased in the released models' favour.
+
+| Model | Set | Sensitivity (95% CI) | Precision (95% CI) | FP | Perfect subjects |
+|---|---|---|---|---|---|
+| Released ensemble | all 127 | 342/377 = 90.7% (87.3–93.4) | 342/377 = 90.7% (87.3–93.4) | 35 | 93/127 |
+| 501 nnU-Net, original labels | all 127 | 351/377 = 93.1% (90.1–95.4) | 351/367 = 95.6% (93.0–97.5) | 16 | 102/127 |
+| **511 nnU-Net, corrected labels** | all 127 | **354/377 = 93.9% (91.0–96.1)** | **354/363 = 97.5% (95.3–98.9)** | **9** | **103/127** |
+| 511 + re-ranker | all 127 | 354/377 = 93.9% (91.0–96.1) | 354/363 = 97.5% (95.3–98.9) | 9 | 103/127 |
+| Released ensemble | test 25 | 70/74 = 94.6% (86.7–98.5) | 70/75 = 93.3% (85.1–97.8) | 5 | 20/25 |
+| 501 | test 25 | 71/74 = 95.9% (88.6–99.2) | 71/74 = 95.9% (88.6–99.2) | 3 | 23/25 |
+| 511 | test 25 | 67/74 = 90.5% (81.5–96.1) | 67/69 = 97.1% (89.9–99.6) | 2 | 18/25 |
+| 511 + re-ranker | test 25 | 68/74 = 91.9% (83.2–97.0) | 68/69 = 98.6% (92.2–100) | 1 | 19/25 |
+
+The test-25 rows for 501/511 are OOF predictions from the CV models. They are not a temporal split:
+these models trained on later-acquired subjects too. 512 will provide the temporal comparison.
+
+**Paired comparisons** (same subjects, per-marker; subject-bootstrap 95% CI of the difference; exact McNemar on discordant markers):
+
+| Contrast | Set | Markers found only by A / only by B | ΔSensitivity (95% CI) | ΔPrecision (95% CI) | McNemar p |
+|---|---|---|---|---|---|
+| 511 vs 501 (label fix) | all 127 | 15 / 12 | +0.8 pp (−1.6 to +3.2) | +1.9 pp (−0.1 to +4.0) | 0.70 |
+| 511 vs 501 | test 25 | 1 / 5 | −5.4 pp (−12.0 to 0.0) | +1.2 pp (−3.1 to +6.2) | 0.22 |
+| 511 vs released | all 127 (biased toward released) | 23 / 11 | +3.2 pp (+0.3 to +6.2) | +6.8 pp (+4.1 to +9.7) | – |
+| 511 vs released | test 25 | 2 / 5 | −4.1 pp (−10.8 to +2.7) | +3.8 pp (−1.7 to +10.3) | – |
+| 511 re-ranked vs 511 | all 127 | 2 / 2 | 0 (−0.8 to +0.8) | 0 | – |
+
+**Single fold vs ensemble.** In 5-fold CV, each subject has exactly one held-out model, so the
+5-model ensemble can't be evaluated on these subjects without leakage. That comparison waits for 512
+(temporal test with the 5-fold ensemble, export job 29934250). Per-fold results, where each single
+model is evaluated on its own held-out subjects:
+
+| Fold (n subjects) | 501 sens | 501 prec | 511 sens | 511 prec | 511 perfect |
+|---|---|---|---|---|---|
+| 0 (26) | 71/76 | 71/74 | 71/76 | 71/74 | 21/26 |
+| 1 (26) | 72/78 | 72/76 | 73/78 | 73/73 | 21/26 |
+| 2 (25) | 69/74 | 69/73 | 71/74 | 71/74 | 21/25 |
+| 3 (25) | 71/74 | 71/72 | 71/74 | 71/72 | 22/25 |
+| 4 (25) | 68/75 | 68/72 | 68/75 | 68/70 | 18/25 |
+
+**What this does and doesn't show.**
+- Both nnU-Net arms beat the released ensemble on all 127, mostly through fewer false positives
+  (35 → 16 → 9). This holds despite the bias in the released models' favour.
+- 511 vs 501: 511 has fewer FPs (9 vs 16) and 3 more TPs on all 127. Neither difference is
+  significant, since the CIs include 0. On test 25, 511 is 4 markers *worse* than 501. With n=25 that
+  isn't significant either (p=0.22), but the direction is the opposite of the hypothesis. **The label
+  fix has not been shown to improve detection.** Its clearest effect is precision.
+- The re-ranker adds nothing on all 127. There are only about 20 non-marker candidates per training
+  fold, so it has little to learn from. The +1 on test 25 is one marker.
+
+**Remaining errors, 511 (all 127): 23 misses, 9 FPs.**
+- 15 misses have **no candidate**: marker probability below 0.1 everywhere within 5 mm. All are clear
+  voids in 3-marker subjects where 511 output only 2 components (see Needs Ashley). 7 of them are also
+  missed by 501 and 5 by the released models.
+- 8 misses are **ranking errors**: a candidate exists but a look-alike outranks it, so it falls out of
+  the top 3. These account for 7 of the 9 FPs.
+- The candidate recall ceiling is 95.8% (361/377), the same as 501's.
+- 501 for comparison: 26 misses = 11 ranking + 15 "no candidate". 6 of those 15 have p ≈ 1 nearby
+  but a merged or displaced component whose centroid is more than 5 mm away; 9 are truly unsegmented.
+  The released models: 22 ranking + 13 no candidate.
+
+Files: `prostate-v2/eval/results/nnunet{501,511}_{all127,test25,fold0..4}_*`,
+`nnunet511_rerank*.csv`, `nnunet511_reranked_*`; analysis `prostate-v2/eval/analysis/`
+(`markers_*.csv`, `misses_511_501.csv`, montage). Scripts: `scripts/evaluation/run_eval_cv.sh`
+(all/test/per-fold) and `scripts/evaluation/compare_arms.py` (paired comparison and miss categories).
 
 ## Locations
 
@@ -205,3 +287,17 @@ Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push
   plateaued early (see Needs Ashley).
 - **Actions.** None needed: no resubmissions, no extra checks queued. The
   scheduled main_end check (29940933) and final_end check (29940934) still stand.
+
+## Main-end check, 2026-10-17 19:18 (job 29940933): training OK, result mixed
+
+- **Training.** All 10 folds of 501 (29915716) and 511 (29929993) COMPLETED in 7 h 53 m to 8 h 18 m,
+  each with `checkpoint_final.pth`. There were no resubmissions.
+- **Export.** 501 (29934246) and 511 (29934247) COMPLETED. Each wrote 127 OOF cases with no
+  argmax/seg warnings. Orientation was spot-checked on z0008611, z0015061, z0099570 (501) and z3154324
+  (511): affines match the image, marker probability is high inside the corrected marker spheres, and
+  the markers sit on T1 voids. For z3154324, 511 gives p=0.68 in the corrected label and 0.00 in the
+  displaced original label.
+- **Evaluation and re-ranker:** see "Results: 511 vs 501" above, and Needs Ashley.
+- **Still running:** 512 folds 0–2 (3–4 pending), then 513 and 521. The final_end check (29940934)
+  still stands. No extra check was queued.
+- The RDM backup was re-run after this check (it includes the 501/511 models).

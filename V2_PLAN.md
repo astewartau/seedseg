@@ -5,10 +5,12 @@ preprint (bioRxiv 10.64898/2026.06.18.733061). The approach has four parts:
 fix the reference labels, retrain with nnU-Net, add physics-simulated markers,
 and evaluate with cross-validation over all 127 subjects.
 
-Last updated: 2026-10-17 ~19:50 (scheduled main_end check, job 29940933 on bun156).
+Last updated: 2026-10-17 ~21:30 (main_end session, follow-up analyses requested by Ashley).
 
 ## Needs Ashley
 
+- **Submit the 3× 250-epoch 511 runs** (auto mode blocked my sbatch). Also: why were the 2025 T1+RTSTRUCT
+  patients and z1438488 left out of the 127? And is a QSM pilot on the 12 multi-echo patients wanted?
 - **511 misses 15 clear voids outright, and 8 of them are found by 501 (main_end check, 2026-10-17).**
   The label fix does not help on test25: 511 gets 67/74, 501 gets 71/74. Of 511's 7 test misses,
   5 are markers with marker probability below 0.1 everywhere within 5 mm, and 4 of those 5 are detected
@@ -171,6 +173,54 @@ Files: `prostate-v2/eval/results/nnunet{501,511}_{all127,test25,fold0..4}_*`,
 `nnunet511_rerank*.csv`, `nnunet511_reranked_*`; analysis `prostate-v2/eval/analysis/`
 (`markers_*.csv`, `misses_511_501.csv`, montage). Scripts: `scripts/evaluation/run_eval_cv.sh`
 (all/test/per-fold) and `scripts/evaluation/compare_arms.py` (paired comparison and miss categories).
+
+## Follow-up analyses (2026-10-17 evening, requested by Ashley): how to go further
+
+All analyses below are CPU-only on the existing 501/511 out-of-fold outputs and are evaluated on all 127
+subjects (plain 511: 354/377, 9 FP, 103 perfect).
+
+| Variant (all 127) | Sensitivity | FP | Perfect | Notes |
+|---|---|---|---|---|
+| 511 plain | 354/377 | 9 | 103 | – |
+| Average of 501 + 511 probability maps | 357/377 | 13 | 107 | paired vs 511: +9/−6 markers, ΔSens CI −1.1 to +2.7 pp |
+| 511 + constellation selection (pre-specified) | 356/377 | 7 | 105 | +5/−3, ΔSens CI −0.5 to +1.6 pp |
+| 511 + constellation + extra candidates p>1e-3 | 359/377 | 8 | 108 | threshold **not** chosen blind |
+| 511 + constellation + extra candidates p>1e-4 | 361/377 | 8 | 110 | +10/−3, CI +0.5 to +3.4 pp; threshold informed by looking at the misses, so optimistic |
+
+Test 25: average 70/74 with 4 FP; constellation 68/74 with 1 FP; constellation plus extras at 1e-4 69/74 with 2 FP.
+
+- **Averaging** recovers 7 of the 8 markers that 501 finds and 511 misses. It loses 6 that only 511
+  found, because detections from a single model drop to p ≈ 0.5 and are then outranked. Repeat runs
+  of the *same* model plus better selection should do better than mixing arms. This needs the 3×
+  250-epoch 511 runs (not yet submitted: the Slurm submission was blocked by the auto-mode
+  classifier, so Ashley should run the command recorded in the session, using
+  `RESULTS_TAG=r1..r3`, `TRAINER=nnUNetTrainer_250epochs`).
+- **Constellation selection** (`scripts/rerank/constellation.py`) chooses the K candidates that
+  jointly maximise candidate score plus a geometric prior learned from the training folds. K is the
+  reference marker count, standing in for the implant record. λ was chosen by inner CV within each
+  outer fold; every fold picked 0.1, so the prior acts as a light tie-breaker. It fixes 5 ranking
+  swaps and loses 3.
+- **Count flag.** If the implant count is known, subjects where fewer than K markers are output flag
+  themselves for review, with no false alarms. For plain 511 that is 15 subjects (all 127).
+- **The 11 markers that both 501 and 511 miss, looked at at full resolution**
+  (`eval/analysis/hardcore_11.png`):
+  - 4 are ranking errors: 511 has a strong blob on a clear void (z0147288, z2514519, z3137578, z1982224).
+  - 3 are clear voids that the networks ignore, at vessel junctions or fat-plane edges (z1818331, z3284359, z0152238).
+  - 3 have difficult surroundings: abutting T1-bright blood (z1451132, z1219334) or at the edge of rectal air (z6029265).
+  - 1 has no distinct void visible (z1848016; the refinement did not move it).
+- **Phase / QSM data exists, but not for the 127.** All 127 study subjects are magnitude-only T1
+  (3T). **12 other patients (2022-11 to 2023-07) have a 7-echo QSM acquisition**
+  (`t2starME_qsm_tra_Iso1.4mm_INPHASE_bipolar`, with magnitude, phase and scanner QSM):
+  - 9 also have CT; 5 also have the T1 seed sequence;
+  - none has REG or RTSTRUCT, so CT→MR registration would be needed for labels.
+
+  Also available: 1 patient with iSWI phase (z0381949) and the gold-seed phantom (4-echo QSM).
+  This is enough for a pilot on whether QSM separates gold from calcification and blood in vivo.
+  Inventory: `eval/analysis/dicom_series_inventory.txt`.
+- **Possible extra T1 training subjects not in the 127** (reason for exclusion unknown):
+  - 2025 patients with T1 and RTSTRUCT: z2153014, z3152040, z1224615, z2743361 (+REG), z2969010 (+REG);
+  - 2025 OpenRecon test patients with T1 (and CT for some);
+  - z1438488 (2021, with CT, MR, REG and RTSTRUCT).
 
 ## Locations
 

@@ -10,7 +10,11 @@ Last updated: 2026-10-17 ~21:30 (main_end session, follow-up analyses requested 
 ## Needs Ashley
 
 - **Submit the 3× 250-epoch 511 runs** (auto mode blocked my sbatch). Also: why were the 2025 T1+RTSTRUCT
-  patients and z1438488 left out of the 127? And is a QSM pilot on the 12 multi-echo patients wanted?
+  patients left out of the 127? (z1438488 is answered: the original data marks it
+  `EXCLUDE_INVALID_SEGMENTATION`, a label-derivation failure that the v2 DICOM pipeline might now
+  fix. It's one subject, so low priority. z0354148 and z0791295 were excluded for missing T1.)
+  **QSM: deprioritised (Ashley, 2026-10-17).** It was investigated earlier on a QSM dataset of about
+  30 subjects on the RDM and never beat T1, and the project has moved on. Don't propose a QSM pilot again.
 - **511 misses 15 clear voids outright, and 8 of them are found by 501 (main_end check, 2026-10-17).**
   The label fix does not help on test25: 511 gets 67/74, 501 gets 71/74. Of 511's 7 test misses,
   5 are markers with marker probability below 0.1 everywhere within 5 mm, and 4 of those 5 are detected

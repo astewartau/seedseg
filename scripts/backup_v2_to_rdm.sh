@@ -12,11 +12,11 @@ DEST=/QRISdata/Q0748/data/prostate/v2-work
 STAMP=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$DEST"
 cd "$R"
-files=(labels labelfix synthetic eval/results splits_original.json subjects.txt)
+files=(labels labelfix synthetic eval/results eval/analysis splits_original.json subjects.txt)
 for f in nnunet/nnUNet_raw/*/dataset.json nnunet/nnUNet_preprocessed/*/splits_final.json \
          nnunet/nnUNet_preprocessed/*/nnUNetResEncUNetMPlans.json \
-         nnunet/nnUNet_results/*/*/fold_*/checkpoint_final.pth nnunet/nnUNet_results/*/*/plans.json \
-         nnunet/nnUNet_results/*/*/dataset.json nnunet/nnUNet_results/*/*/fold_*/training_log_*.txt; do
+         nnunet/nnUNet_results*/*/*/fold_*/checkpoint_final.pth nnunet/nnUNet_results*/*/*/plans.json \
+         nnunet/nnUNet_results*/*/*/dataset.json nnunet/nnUNet_results*/*/*/fold_*/training_log_*.txt; do
   [ -e "$f" ] && files+=("$f")
 done
 tar -cf "$DEST/v2-data-$STAMP.tar" "${files[@]}"

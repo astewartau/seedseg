@@ -5,7 +5,7 @@
 #  - if the dataset has imagesTs (Design B): 5-fold ensemble prediction with
 #    --save_probabilities, then exported likewise.
 # Usage: sbatch --export=ALL,DATASET=502 scripts/nnunet/predict.slurm
-#   optional: TRAINER, PLANS, FOLDS="0 1 2 3 4"
+#   optional: TRAINER, PLANS, FOLDS="0 1 2 3 4", RESULTS_TAG (see env.sh)
 #SBATCH --job-name=nnunet-pred
 #SBATCH --partition=gpu_cuda
 #SBATCH --qos=gpu
@@ -26,7 +26,7 @@ FOLDS=${FOLDS:-0 1 2 3 4}
 source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
 name=$(basename "$(ls -d "$nnUNet_raw"/Dataset"$(printf %03d "$DATASET")"_*)")
 model="$nnUNet_results/$name/${TRAINER}__${PLANS}__3d_fullres"
-out="$NNUNET_BASE/predictions/$name/${TRAINER}__${PLANS}"
+out="$NNUNET_BASE/predictions${RESULTS_TAG:+_$RESULTS_TAG}/$name/${TRAINER}__${PLANS}"
 mkdir -p "$out"
 echo "Dataset $name, model $model -> $out at $(date)"
 

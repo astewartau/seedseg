@@ -7,6 +7,7 @@ conda activate seedseg-nnunet
 export NNUNET_BASE=/scratch/user/uqaste15/prostate-v2/nnunet
 export nnUNet_raw=$NNUNET_BASE/nnUNet_raw
 export nnUNet_preprocessed=$NNUNET_BASE/nnUNet_preprocessed
-export nnUNet_results=$NNUNET_BASE/nnUNet_results
+# RESULTS_TAG=<tag> keeps repeat runs of the same trainer apart (nnUNet_results_<tag>, predictions_<tag>)
+export nnUNet_results=$NNUNET_BASE/nnUNet_results${RESULTS_TAG:+_$RESULTS_TAG}
 export PYTHONUNBUFFERED=1
 export SEEDSEG_REPO=/scratch/user/uqaste15/src/seedseg-nnunet

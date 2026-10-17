@@ -2,6 +2,7 @@
 # Train nnU-Net 3d_fullres ResEnc-M, one fold per array task.
 # Usage: sbatch --array=0-4 --export=ALL,DATASET=501 scripts/nnunet/train.slurm
 #   optional: TRAINER=nnUNetTrainer_5epochs (default nnUNetTrainer, 1000 epochs)
+#             RESULTS_TAG=r2 for a repeat run in its own results dir (see env.sh)
 # --npz makes the final validation save softmax probabilities of the held-out
 # fold (fold_X/validation/*.npz) -> out-of-fold probability maps.
 # Resubmitting continues from the latest checkpoint (--c) if one exists.

@@ -42,12 +42,12 @@ OOF = P + '/nnunet/predictions/Dataset511_SeedSegCvAll_corrected/nnUNetTrainer__
 LAMS = [0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0]
 
 
-def subject_context(sid, extra_thr, thr, cache_dir):
+def subject_context(sid, extra_thr, thr, cache_dir, oof=OOF):
     """Prostate frame, surface distance at candidates, and extra low-threshold candidates."""
     cf = os.path.join(cache_dir, f'{sid}_{extra_thr:g}.json')
     if os.path.exists(cf):
         return json.load(open(cf))
-    img = nib.load(f'{OOF}/{sid}_probs.nii.gz')
+    img = nib.load(f'{oof}/{sid}_probs.nii.gz')
     pr = np.asarray(img.dataobj, np.float32); z = np.array(img.header.get_zooms()[:3], float)
     pm, pp = pr[..., 1], pr[..., 2]
     mask = pp > 0.5
@@ -121,7 +121,8 @@ def main():
     ap.add_argument('--extra-thr', type=float, default=None, help='add low-threshold candidates (e.g. 1e-3)')
     ap.add_argument('--k', type=int, default=None, help='fixed set size (default: implant count from record)')
     ap.add_argument('--lam', type=float, default=None, help='fixed lambda (default: inner-CV per outer fold)')
-    ap.add_argument('--cache', default=P + '/eval/cache_constellation')
+    ap.add_argument('--oof', default=OOF, help='nnU-Net OOF dir with {sid}_probs.nii.gz (prostate class for the frame)')
+    ap.add_argument('--cache', default=P + '/eval/cache_constellation', help='per-arm cache dir (keyed by subject only)')
     ap.add_argument('--out', required=True, help='output prefix')
     a = ap.parse_args()
     os.makedirs(a.cache, exist_ok=True)
@@ -130,7 +131,7 @@ def main():
     C = pd.read_csv(a.candidates)
     rows, refs, Kof = [], {}, {}
     for sid in subs:
-        ctx = subject_context(sid, a.extra_thr if a.extra_thr is not None else 1.0, a.thr, a.cache)
+        ctx = subject_context(sid, a.extra_thr if a.extra_thr is not None else 1.0, a.thr, a.cache, a.oof)
         sdist = np.load(os.path.join(a.cache, f'{sid}_sdist.npy'))
         rec = json.load(open(f'{P}/labelfix/refined/{sid}.json')); ex = set(rec.get('excluded', []))
         allv = np.array(rec['markers_final_vox'])

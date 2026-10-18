@@ -9,6 +9,20 @@ Last updated: 2026-10-19 (final_end check, job 29940934).
 
 ## Needs Ashley
 
+- **2025 patients as a fresh test set: comparable, but almost none are labelled (2026-10-19).**
+  Report: `eval/analysis/acq_comparability_2025.md`, `acq_params.csv`.
+  - The 127 span two eras on the same Skyra 3T with identical geometry:
+    - 2020-10 to 2021-11, software E11, TR 689 ms (n=61);
+    - 2025-02 to 2026-01, software XA60, TR 600 ms (n=68, including all of test25).
+  - The candidates match their era. But only z1224615 can be labelled directly; z3152040 (markers only)
+    and z1438488 (cross-frame REG) are possible with QC. The 7 new OpenRecon-folder patients have no
+    RTSTRUCT/REG, so they would need new annotation. Their `_OpenRecon` series must never be used:
+    they are rescaled and have burned-in overlays.
+  - **Flag:** test25 subject **z1219334 is an OpenRecon reconstruction**, about 2.6× the usual intensity
+    (p99 1543 vs median 601; verified). It has no overlay, and nnU-Net z-scores per image, but it is one
+    of the hard-11 misses. Decide whether to swap it for its `_RR` series.
+  - The methods draft (`METHODS_V2.md`, 3d96d66) has 13 `[check: …]` items for you.
+
 - **2026-10-19, Ashley's decisions:** rerun 521, run the 250-epoch repeats, check whether the 2025 patients are
   comparable before using them as a fresh test set, and write up the updated methods. Ship once the
   pieces are together. **Submitted (Claude, 2026-10-19 ~03:30):**

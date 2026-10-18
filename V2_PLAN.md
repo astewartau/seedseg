@@ -5,10 +5,25 @@ preprint (bioRxiv 10.64898/2026.06.18.733061). The approach has four parts:
 fix the reference labels, retrain with nnU-Net, add physics-simulated markers,
 and evaluate with cross-validation over all 127 subjects.
 
-Last updated: 2026-10-17 ~21:30 (main_end session, follow-up analyses requested by Ashley).
+Last updated: 2026-10-19 (final_end check, job 29940934).
 
 ## Needs Ashley
 
+- **521 (shape control) is invalid: its labels have no marker class (final_end check, 2026-10-19).**
+  `scripts/labels/make_original_sphere.py` wrote the spheres into `lab.reshape(-1)`. nibabel returns
+  Fortran-ordered arrays, so that is a copy and every write was lost. Every file in
+  `labels/original_sphere/` and `nnUNet_raw/Dataset521…/labelsTr` contains only background and
+  prostate (the old marker voxels became prostate). 521 therefore trained a prostate-only model:
+  0 detections, max marker probability about 1e-3. Training itself ran normally (5/5 folds, export OK).
+  The script is fixed in commit 901c54d and checked on 5 subjects written to a temp dir (sphere count
+  equals original blob count). **I have not regenerated anything**, because that would overwrite
+  `labels/original_sphere`, the 521 raw/preprocessed data and the 521 models. To rerun the
+  arm (about 40 GPU-h, the same design), move the old 521 results aside, then run:
+  `python scripts/labels/make_original_sphere.py /scratch/user/uqaste15/prostate-v2`, reconvert/preprocess
+  521 (`scripts/nnunet/`, as for the other arms), retrain and export. Alternatively drop the arm: 511 vs 501
+  already brackets the label-fix effect, and it was not significant.
+- **The 3× 250-epoch 511 repeats were never submitted** (no `nnUNet_results_r*`, no such sacct jobs),
+  so step 2b was skipped. The command is unchanged (see the Follow-up analyses section).
 - **Submit the 3× 250-epoch 511 runs** (auto mode blocked my sbatch). Also: why were the 2025 T1+RTSTRUCT
   patients left out of the 127? (z1438488 is answered: the original data marks it
   `EXCLUDE_INVALID_SEGMENTATION`, a label-derivation failure that the v2 DICOM pipeline might now
@@ -16,6 +31,7 @@ Last updated: 2026-10-17 ~21:30 (main_end session, follow-up analyses requested 
   **QSM: deprioritised (Ashley, 2026-10-17).** It was investigated earlier on a QSM dataset of about
   30 subjects on the RDM and never beat T1, and the project has moved on. Don't propose a QSM pilot again.
 - **511 misses 15 clear voids outright, and 8 of them are found by 501 (main_end check, 2026-10-17).**
+  *(Update 2026-10-19: 513 recovers 7 of the 15; 8 remain without a candidate.)*
   The label fix does not help on test25: 511 gets 67/74, 501 gets 71/74. Of 511's 7 test misses,
   5 are markers with marker probability below 0.1 everywhere within 5 mm, and 4 of those 5 are detected
   at p ≈ 1 by 501 (z0008611 m2, z0324733 m0, z1623770 m2, z6031238 m0). All 15 of these markers have
@@ -61,7 +77,7 @@ The released 4-model ensemble reproduces the preprint (test 70/73 sensitivity,
 |---|---|---|---|
 | 1 | Rebuild labels from DICOM, refine on MR voids, QC | **Done**; methods draft written | `scripts/labels/` (README = methods), branch `v2-labels` |
 | 2 | Centroid-matching evaluation (5 mm, one-to-one, CIs) | **Done** | `scripts/evaluation/evaluate_detections.py` |
-| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **501 and 511 done and evaluated** (2026-10-17; see results below); 512/513/521 training | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
+| 3 | nnU-Net v2 ResEnc-M, 5-fold CV | **All arms trained and evaluated** (2026-10-19). 513 + constellation is best; 521 invalid (label bug, see Needs Ashley) | `scripts/nnunet/` in worktree `seedseg-nnunet`, branch `v2-nnunet` |
 | 4 | Physics-based synthetic markers and distractors | **Done and validated**; 254 cases generated | `scripts/synth/` (README = methods), worktree `seedseg-synth`, branch `v2-synth` |
 | 5 | Second-stage candidate re-ranker | **Evaluated on 511 OOF candidates: no net gain** (all 127: +2/−2 markers, FP 9→9) | `scripts/rerank/rerank.py` |
 | 6 | Write-up (methods/results) | Not started | – |
@@ -177,6 +193,120 @@ Files: `prostate-v2/eval/results/nnunet{501,511}_{all127,test25,fold0..4}_*`,
 `nnunet511_rerank*.csv`, `nnunet511_reranked_*`; analysis `prostate-v2/eval/analysis/`
 (`markers_*.csv`, `misses_511_501.csv`, montage). Scripts: `scripts/evaluation/run_eval_cv.sh`
 (all/test/per-fold) and `scripts/evaluation/compare_arms.py` (paired comparison and miss categories).
+
+## Results: 512, 513, 521 (final_end check, 2026-10-19)
+
+Same evaluation as above: corrected references, 5 mm one-to-one matching, threshold 0.1, top 3 by mean
+probability, 95% Clopper-Pearson CIs; paired = per-marker, subject-bootstrap CI of the difference
+and exact McNemar on discordant markers. 513 and 521 are OOF over the same 5 folds as 501/511.
+512 is the temporal design: 5 folds over the 102 earlier subjects, and the 25 later test subjects
+predicted by the **5-fold ensemble** (never seen in training).
+
+| Model | Set | Sensitivity (95% CI) | Precision (95% CI) | FP | Perfect | Count-flagged |
+|---|---|---|---|---|---|---|
+| 511 (from above) | all 127 | 354/377 = 93.9% (91.0–96.1) | 354/363 = 97.5% (95.3–98.9) | 9 | 103/127 | 15 |
+| 511 + constellation (from above) | all 127 | 356/377 = 94.4% | 356/363 = 98.1% | 7 | 105/127 | – |
+| **513 corrected + synthetic** | all 127 | **357/377 = 94.7% (91.9–96.7)** | 357/369 = 96.7% (94.4–98.3) | 12 | 105/127 | – |
+| **513 + constellation (pre-specified)** | all 127 | **360/377 = 95.5% (92.9–97.4)** | **360/368 = 97.8% (95.8–99.1)** | 8 | **109/127** | 10 |
+| 513 + constellation + extras p>1e-3 (*not blind*) | all 127 | 361/377 = 95.8% | 361/369 = 97.8% | 8 | 110/127 | 9 |
+| 513 + constellation + extras p>1e-4 (*not blind*) | all 127 | 361/377 = 95.8% | 361/369 = 97.8% | 8 | 110/127 | 9 |
+| 521 original_sphere | all 127 | **0/377: invalid**, labels had no marker class (see Needs Ashley) | – | 0 | 0 | – |
+| Released ensemble | test 25 | 70/74 = 94.6% (86.7–98.5) | 70/75 = 93.3% (85.1–97.8) | 5 | 20/25 | – |
+| **512 5-fold ensemble, temporal** | test 25 | 67/74 = 90.5% (81.5–96.1) | 67/69 = 97.1% (89.9–99.6) | 2 | 18/25 | – |
+| 512 OOF (single fold models) | earlier 102 | 286/303 = 94.4% (91.2–96.7) | 286/294 = 97.3% (94.7–98.8) | 8 | 85/102 | – |
+| 511 OOF | test 25 | 67/74 = 90.5% | 67/69 = 97.1% | 2 | 18/25 | – |
+| 513 OOF | test 25 | 73/74 = 98.6% (92.7–100) | 73/74 = 98.6% (92.7–100) | 1 | 24/25 | 0 |
+| 513 + constellation | test 25 | 73/74 = 98.6% | 73/74 = 98.6% | 1 | 24/25 | 0 |
+
+Per fold, 513 (sens / prec): 70/76, 70/76 · 74/78, 74/74 · 72/74, 72/75 · 71/74, 71/72 · 70/75, 70/72.
+
+| Contrast | Set | Only A / only B | ΔSens (95% CI) | ΔPrec (95% CI) | McNemar p |
+|---|---|---|---|---|---|
+| 513 vs 511 (synthetic data) | all 127 | 12 / 9 | +0.8 pp (−1.3 to +2.9) | −0.8 pp (−2.4 to +0.8) | 0.66 |
+| 513 vs 511 | test 25 | 6 / 0 | +8.1 pp (+2.7 to +13.7) | +1.5 pp (0 to +4.6) | 0.031 |
+| 513 vs 511 | other 102 (= all − test) | 6 / 9 | – | – | 0.61 |
+| 513 vs 501 | all 127 | 18 / 12 | +1.6 pp (−0.8 to +4.0) | +1.1 pp (−1.0 to +3.3) | 0.36 |
+| 513+constellation vs 511+constellation | all 127 | 10 / 6 | +1.1 pp (−0.8 to +2.9) | −0.3 pp (−1.1 to +0.6) | 0.45 |
+| 513+constellation vs 513 | all 127 | 4 / 1 | +0.8 pp (0 to +1.9) | +1.1 pp (+0.3 to +2.2) | 0.38 |
+| 513 vs 511, both + constellation + extras 1e-4 (not blind) | all 127 | 8 / 8 | 0 (−1.9 to +1.9) | 0 | 1.0 |
+| 512 ensemble vs released | test 25 | 3 / 6 | −4.1 pp (−10.8 to +2.7) | +3.8 pp (−1.8 to +10.3) | 0.51 |
+| 512 ensemble vs 511 OOF | test 25 | 4 / 4 | 0 (−6.8 to +6.7) | 0 | 1.0 |
+| 513 OOF vs released | test 25 | 4 / 1 | +4.1 pp (−1.4 to +9.6) | +5.3 pp (−0.1 to +12.0) | 0.38 |
+
+**513 vs 511: does the synthetic data help?**
+- On all 127, the pre-specified comparison, 513 is +3 markers (+12/−9) and +3 FP: no detectable
+  difference (CI −1.3 to +2.9 pp). The miss mix changes. 513 has 12 "no candidate" misses (vs 15) and
+  recovers **7 of 511's 15 clear voids** that had p<0.1. It loses 9 markers that 511 found
+  (6 ranked out, 3 no candidate), all outside test 25.
+- On test 25, 513 is +6/−0 (p=0.031). But test 25 is a subset of the 127 and was not the
+  pre-specified endpoint for the CV arms. On the other 102 subjects the gain reverses (+6/−9), so the
+  test-25 gain is not, on its own, evidence of a real effect.
+- **T1-bright blood.** I defined bright fraction as the share of voxels > 1.6× local tissue level
+  within 6 mm of the reference marker, the re-ranker's feature
+  (`scripts/evaluation/marker_bright_frac.py` → `eval/analysis/marker_bright_frac.csv`).
+  - Top 10% of markers (bright fraction > 0.0085, n=37): 511 32/37, 513 33/37 (+2/−1); 501 and
+    released 32/37.
+  - Top 5% (n=19): 511 18/19, 513 19/19.
+  - Of the two blood-adjacent markers that no model found before, 513 detects **z1219334 m1**;
+    **z1451132 m2** is still missed by every model.
+  - So there is a small favourable shift, but on 1–2 markers.
+- With constellation selection on top, 513 gives the best numbers so far: 360/377, 8 FP, 109/127
+  perfect. It is still not significantly better than 511 + constellation (+10/−6, p=0.45). With the
+  non-blind extra candidates, 513 and 511 converge: both get 361/377 with 8 FP.
+
+**521 vs 501/511 (shape vs position): no answer.** The 521 labels had no marker class, so the
+arm is uninformative (see Needs Ashley). Constellation selection on 521 was skipped (no candidates).
+
+**512 vs released on the temporal test (the preprint's design).**
+- With the 5-fold nnU-Net ensemble trained on the 102 earlier subjects and corrected labels, 512 gets
+  67/74 with 2 FP, against the released 70/74 with 5 FP. The difference is −3 TP and −3 FP
+  (+3/−6 markers, p=0.51, ΔSens CI −10.8 to +2.7 pp). **Neither way is significant at n=25.**
+- 512 makes exactly the same totals as 511's single OOF models on test 25 (67/74, 2 FP), with a
+  4/4 swap of markers. **On this evidence, the 5-model ensemble adds nothing over one model.**
+- 512's 7 test misses are 5 "no candidate" and 2 ranked out, the same pattern as 511.
+
+Files: `eval/results/nnunet513_*`, `nnunet513_constellation*`, `nnunet512_test25ens_*`,
+`nnunet512_oof102_*`, `nnunet521_*` (all-zero); `eval/analysis/markers_{nn513,nn513c,nn511c,nn512ens}.csv`,
+`marker_bright_frac.csv`. `scripts/rerank/constellation.py` now takes `--oof` (per-arm prostate maps)
+and should be given a per-arm `--cache`.
+
+### Recommended final model and next steps (for Ashley)
+
+- **Deploy 513 (corrected labels + synthetic markers) with constellation selection, K = implant count.**
+  - It has the best point estimates on every set: all 127 360/377, 8 FP, 109/127 perfect; test 25
+    73/74, 1 FP.
+  - It is not significantly better than 511. The choice rests on point estimates plus the recovered
+    clear voids, not on proof of superiority.
+  - Show the **count flag**: when fewer than K markers are output, flag the case for review. On all 127
+    this flags 10 subjects (0 in test 25), and when the implant count is known it raises no false
+    alarms.
+  - Constellation with extra low-threshold candidates scored 361/377, 8 FP at both 1e-3 and 1e-4. That is +1 over the pre-specified version and equal to 511 with the same extras (paired 8/8). Its threshold was not chosen
+    blind. Don't deploy it without a fresh test set.
+- **One model, not five.** 512 shows the 5-fold ensemble = single model on the temporal test. For
+  deployment, either take one 513 fold model or train a single 513 model on all 127 real + 254
+  synthetic cases (nnU-Net fold `all`, about 8 h). The 5× inference cost of an ensemble isn't justified.
+- **CNN verifier: not worthwhile yet.** 513 + constellation has only 5 ranking errors left on 127
+  subjects; the other 12 misses have no candidate at all, which a verifier can't fix. The
+  hand-crafted re-ranker already gave nothing.
+- **Slice-profile refinement: low priority.** 513 doesn't clearly beat 511, so the plan's own
+  condition for revisiting it is not met. If you do it, regenerate the synthetic cases with a realistic
+  slice profile and run one more arm (about 40 GPU-h). Expect a small effect.
+- **Add the 2025 T1 patients**: z2153014, z3152040, z1224615, z2743361 (+REG), z2969010 (+REG), plus the
+  OpenRecon test patients with T1.
+  - Their most valuable use is as a **genuinely new test set**: acquired after all 127, and labelled
+    with the v2 DICOM pipeline before any model is run on them.
+  - This would also give the unbiased check that the extras/constellation thresholds currently lack.
+  - Fold them into training only after that evaluation.
+- **Web app and OpenRecon.**
+  - Export the chosen nnU-Net network to ONNX (fixed patch size from the plans, opset ≥17).
+  - Re-implement nnU-Net's preprocessing: resample to the plans spacing, then z-score.
+  - Re-implement Gaussian-weighted sliding-window inference with mirroring (or without, if parity holds),
+    then candidate extraction (threshold 0.1, mean-probability score) and constellation selection.
+    The geometric prior is a small set of KDEs fitted on all 127; export them as JSON.
+  - Check parity against `nnUNetv2_predict` on test 25 (same detections, probabilities within about 1e-3)
+    before replacing the released ONNX models on OSF and in the web app.
+  - OpenRecon: the same ONNX plus Python post-processing. Let the implant count come from the user or
+    the protocol, with a default of 3.
 
 ## Follow-up analyses (2026-10-17 evening, requested by Ashley): how to go further
 
@@ -355,3 +485,21 @@ Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push
 - **Still running:** 512 folds 0–2 (3–4 pending), then 513 and 521. The final_end check (29940934)
   still stands. No extra check was queued.
 - The RDM backup was re-run after this check (it includes the 501/511 models).
+
+## Final-end check, 2026-10-19 (job 29940934)
+
+- **Training.** All folds COMPLETED with `checkpoint_final.pth` and no resubmissions:
+  - 512 (29929995), 513 (29929997) and 521 (29915718): 5/5 each, 7 h 49 m to 8 h 27 m per fold.
+- **Exports.**
+  - 513 (29934248): 127 OOF cases.
+  - 512 (29934250): 102 OOF cases plus a 25-case test ensemble, which matches `test25.txt`.
+  - 521 (29934249): ran 02:29–02:31 on 19 Oct, 127 OOF cases.
+  - `.err` files are empty. Orientation was spot-checked on 513 (z0008611, z3154324, z6041318), 512 test and
+    OOF, and 521: affines and shapes match the images, marker probability is 0.5–0.76 inside the
+    corrected spheres and about 0 elsewhere.
+- **Problem found: 521's labels have no marker class.** Code fixed (901c54d); data and arm left for
+  Ashley (see Needs Ashley).
+- **2b.** The 250-epoch repeat runs of 511 were never submitted, so that step was skipped.
+- **Evaluation.** See "Results: 512, 513, 521". 513 + constellation is the best model so far, but it
+  is not significantly better than 511.
+- No follow-up check was queued (nothing is running). The RDM backup was re-run.

@@ -9,6 +9,24 @@ Last updated: 2026-10-19 (final_end check, job 29940934).
 
 ## Needs Ashley
 
+- **2026-10-19, Ashley's decisions:** rerun 521, run the 250-epoch repeats, check whether the 2025 patients are
+  comparable before using them as a fresh test set, and write up the updated methods. Ship once the
+  pieces are together. **Submitted (Claude, 2026-10-19 ~03:30):**
+  - **521 rerun:** the invalid run was moved to `prostate-v2/invalid_521_20261019/` (labels, raw,
+    preprocessed, results, predictions, eval; nothing deleted). Labels were regenerated with the fixed
+    script: 369 spheres, which equals the original blob count in every subject. Dataset rebuilt (splits unchanged).
+    Jobs: preprocess 30114402 → train 30114403 → export 30114404.
+  - **250-epoch 511 repeats:**
+    - r1: train 30114276 → export 30114277;
+    - r2: train 30114278 → export 30114280;
+    - r3: train 30114281 → export 30114282.
+  - **Follow-up check `rerun_end`: job 30114430** (`afterany` on the 4 training arrays). It evaluates
+    521 and the repeats, the 3-run average, and the average + constellation
+    (`scripts/monitor/prompts/rerun_end.md`).
+  - Expected: 15 × about 2 h plus 5 × about 8 h on 4 GPUs, so about 20 h if the queue is prompt.
+  - 2025-patient comparability check: `eval/analysis/acq_comparability_2025.md`. Methods draft:
+    `METHODS_V2.md`.
+
 - **521 (shape control) is invalid: its labels have no marker class (final_end check, 2026-10-19).**
   `scripts/labels/make_original_sphere.py` wrote the spheres into `lab.reshape(-1)`. nibabel returns
   Fortran-ordered arrays, so that is a copy and every write was lost. Every file in

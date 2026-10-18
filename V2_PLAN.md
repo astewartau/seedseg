@@ -502,4 +502,4 @@ Launcher tested 2026-10-16 (job 29940686): starts, RC registers, auto mode, push
 - **2b.** The 250-epoch repeat runs of 511 were never submitted, so that step was skipped.
 - **Evaluation.** See "Results: 512, 513, 521". 513 + constellation is the best model so far, but it
   is not significantly better than 511.
-- No follow-up check was queued (nothing is running). The RDM backup was re-run.
+- No follow-up check was queued (nothing is running). RDM backup 20261019-025328 (includes the 512/513/521 models).

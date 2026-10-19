@@ -82,3 +82,52 @@ re-rasterised CTV matches it with a median Dice of 0.95.
   flagged rows (`labelfix/qc/flagged_*.png`) before publication.
 - Rotations hit the ±6° search bound in the 4 refined patients. Their constellation
   shape still matches the CT, and they were checked visually.
+
+## Automatic labels for new patients without a registration (`auto_ct_labels.py`)
+
+For patients outside the 127 whose archives have no usable CT→MR registration, reference marker
+positions on the T1 are derived without any network and without manual annotation:
+
+1. **Source markers.**
+   - From the CT, where there is one: gold saturates the CT (about 3070 HU). Components of HU > 2000 are
+     split at HU maxima ≥ 5 mm apart. Parts of 4–80 mm³ with a peak ≥ 2500 HU and lying ≥ 30 mm inside the
+     body (this excludes skin, couch and index-bar markers) are clustered with 60 mm single linkage. The
+     cluster with the most saturated members is the marker set.
+   - Otherwise, the RTSTRUCT marker ROIs in whatever frame they are in.
+2. **MR void blobs.** Components of the void map V ≥ 0.45, 2–60 mm³, within 55 mm in-plane of the image
+   centre.
+3. **Rigid matching.** Source triples are matched to blob triples whose inter-marker distances agree
+   within 2.5 mm (Kabsch). If no triple fits, source pairs are matched to blob pairs with a spin search.
+   - Hypotheses are dropped if they rotate more than 13°, shift the centroid left–right more than
+     20 mm, or put the centroid more than 30 mm in-plane or 25 mm through-plane from the image centre.
+   - The rest are scored by the summed 1.5-mm-max-filtered void strength at all transformed markers,
+     then polished by snapping and refitting.
+   - The winning transform places every source marker. The standard refinement (`refine()`: small rigid
+     search, then per-marker void snap) gives the final position.
+4. **Acceptance.** Rotation ≤ 13°, rms residual (source vs final) ≤ 1.0 mm, and ≥ 2 markers on a clear
+   void (≥ 0.45). Every accepted case is then checked visually on its QC montage.
+
+T1 preparation (`prepare`) converts the DICOM series in the voxel layout of the study images and applies
+the same N4 correction. On a study subject this reproduces `images/{sid}.nii` to 1e-5 relative.
+
+**Validation on the 60 study subjects with CT**, run blind to their labels and compared with the
+corrected references:
+- The rotation gate and the field-of-view centre gate were set on the first half (subjects.txt order).
+- CT detection found 175 of 176 RTSTRUCT markers with no false detections. The miss peaks at 1250 HU.
+- Held-out half (31 subjects): 29 accepted, 2 rejected, both of which were wrong matches.
+  - No accepted subject had any marker more than 5 mm from the reference.
+  - Of the 86 reference markers in accepted subjects, 83.7% were within 2 mm, 98.8% within 3 mm and
+    100% within 5 mm.
+  - The 2–3 mm differences are mostly where the void snap lands along the same elongated void.
+- Caveats:
+  - The CT detection limits and the 20 mm left–right gate were chosen looking at all study subjects'
+    CTs and clinical registrations, not only the tuning half.
+  - For the one held-out subject with a QC-excluded marker (no MR void at the CT position), the
+    pipeline still places that marker.
+
+Outputs for new patients go in `prostate-v2/fresh/`:
+- `images/{sid}.nii`;
+- `labels/{sid}.json` (`markers_final_vox` on that grid, plus fit statistics) and `{sid}_qc.png`;
+- `labels/summary.csv`, `subjects_fresh.txt`.
+
+There are no prostate (CTV) labels for these patients.

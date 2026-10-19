@@ -72,6 +72,6 @@ for d in fresh/pred_*; do [ -d "$d" ] && "${RS[@]}" --no-links --exclude='raw/' 
   echo; echo "## Inventory (generated $(date '+%Y-%m-%d %H:%M'))"; echo; echo '```'
   (cd "$DEST" && du -sh --apparent-size docs code data/* models/* predictions/* evaluation/* archive/* 2>/dev/null)
   echo; echo "Models with checkpoint_final:"
-  (cd "$DEST/models" && ls -d nnUNet_results*/*/*/fold_* 2>/dev/null | while read f; do [ -f "$f/checkpoint_final.pth" ] && echo "  $f"; done)
+  (cd "$DEST/models" && ls -d nnUNet_results*/*/*/fold_* 2>/dev/null | while read f; do if [ -f "$f/checkpoint_final.pth" ]; then echo "  $f"; fi; done) || true
   echo '```'; } > "$DEST/README.md"
-echo "Synced to $DEST"; du -sh "$DEST"
+echo "Synced to $DEST"; du -sh --apparent-size "$DEST" || true

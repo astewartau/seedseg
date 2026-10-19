@@ -7,6 +7,31 @@ and evaluate with cross-validation over all 127 subjects.
 
 Last updated: 2026-10-19 (final_end check, job 29940934).
 
+## Decisions (2026-10-19, made by Claude at Ashley's request: "submit as soon as possible")
+
+Goal: submit the revised paper as soon as the running jobs finish, with no manual annotation. The Needs
+Ashley items below are resolved as follows:
+1. **Fresh 2025 test set: dropped.** Only 1 patient is labellable without manual work. Auto-labelling the
+   others (CT-only marker detection, CT→MR registration without REG) would need its own validation,
+   and labelling them with the model's output is circular. State this as a limitation; the 127-subject
+   out-of-fold CV is the main evaluation.
+2. **Main model: 513 + constellation selection (K = implant count) + count flag**, unless the 250-epoch
+   3-run average + constellation beats it on all 127 (decided by the `rerun_end` check, same metrics).
+   Primary contrasts, pre-specified: 511 vs 501 (label fix), 513 vs 511 (synthetic data), 512 vs released
+   (temporal test). 521 and the 250-epoch repeats are secondary.
+3. **521 / 250-epoch reruns:** use them if they finish before the manuscript does (about 20 h).
+   Otherwise report "rerun pending" as supplementary, or leave them out. They do not hold up submission.
+4. **z1219334 (OpenRecon reconstruction in test25): keep as acquired.** Swapping it now would be a post-hoc
+   change to the test set. One neutral sentence goes in the methods.
+5. **511's 15 clear-void misses / rasterisation question: no further work.** 513 recovers 7 of them.
+   Report the miss categories as they are.
+6. **Overfitting / shorter schedule:** answered by the 250-epoch repeats; no other change.
+7. **z1438488 and the 2025 patients: excluded**, for lack of usable reference labels (stated in the methods).
+8. **Methods checks:** the resolvable ones are being resolved from code and records, with
+   conservative wording elsewhere (no claims beyond the records).
+9. **Deployment (web app / OpenRecon) comes after submission.** For the paper, release the 513 model weights
+   and code with the manuscript.
+
 ## Needs Ashley
 
 - **2025 patients as a fresh test set: comparable, but almost none are labelled (2026-10-19).**

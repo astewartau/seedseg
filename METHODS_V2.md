@@ -141,6 +141,84 @@ removed from the reference, and any detection within 5 mm of it was discarded
 before matching, so it counted neither as a true nor as a false positive. The
 reference therefore contained 377 markers (74 in the 25 test patients).
 
+## Independent external test set with automatic reference labels
+
+To test the final models on patients that played no part in any design decision, we
+assembled an external set from patients outside the 127 who had the same T1 marker
+sequence (standard reconstruction; vendor-application reconstructions were never
+used) and either a planning CT or a marker structure set, but no usable CT→MR
+registration. Their reference labels were derived automatically, without any
+trained network and without manual annotation.
+
+**Source markers.** Where a CT was available, gold markers were detected by
+intensity: gold saturates the CT (about 3070 HU). Components above 2000 HU were
+split at intensity maxima at least 5 mm apart. Parts of 4–80 mm³ with a peak of at
+least 2500 HU, lying at least 30 mm inside the body contour (this excludes skin,
+couch and index-bar markers), were clustered with 60 mm single linkage, and the
+cluster with the most saturated members was taken as the marker set. Without a CT,
+the marker points of the planning structure set were used.
+
+**Registration to the MR image.** Candidate voids were the components of the
+void map (the same hand-crafted map used to refine the study labels; V ≥ 0.45,
+2–60 mm³, within 55 mm in-plane of the image centre). Because inter-marker distances
+are invariant to rigid motion, triples of source markers were matched to triples of
+MR voids whose pairwise distances agreed within 2.5 mm, and a rigid transform was
+fitted to each match (Kabsch). If no triple fitted, pairs were matched with a search
+over rotation about the pair axis. Hypotheses were discarded if they rotated by more
+than 13°, shifted the marker centroid by more than 20 mm left–right, or placed it more
+than 30 mm in-plane or 25 mm through-plane from the image centre. The remaining
+hypotheses were scored by the summed void strength (after a 1.5 mm maximum filter)
+at all transformed markers. The best transform placed every source marker, so a
+marker with a weak void was still placed. The same refinement as for the study
+labels (a small rigid search, then a per-marker snap to the void) gave the final
+positions. A case was accepted if the rotation was at most 13°, the rms residual
+between source and final positions was at most 1.0 mm, and at least two markers lay
+on a clear void (V ≥ 0.45). Every accepted case was then checked visually on a QC
+montage.
+
+**Validation of the automatic labels.** The pipeline was run blind on the 60 study
+patients that had a CT, and compared with their corrected reference labels. The
+rotation limit and the image-centre limits were set on the first half (29 patients).
+Results are reported on the second half (31 patients).
+- CT detection found 175 of 176 markers, with no false detections. The missed marker
+  peaked at 1250 HU.
+- In the held-out half, 29 patients were accepted and 2 were rejected; both rejected
+  cases were wrong matches.
+- In the accepted patients, 83.7% of the 86 reference markers were within 2 mm of
+  the automatic position, 98.8% within 3 mm and 100% within 5 mm, the matching
+  tolerance used for evaluation.
+- The CT detection limits and the 20 mm left–right limit were chosen while looking at
+  all 60 patients, not only the tuning half.
+
+The T1 images of the external patients were converted and N4-corrected in the same
+way as the study images. On a study patient, this reproduced the study image to a
+relative difference of 1e-5.
+
+**External set.** Nine patients were accepted, each with 3 markers: 4 acquired in
+2021–2023 (scanner software E11, TR 689 ms) and 5 in 2025 (XA60, TR 600 ms). For two
+of them, clinical marker positions defined directly on the T1 were available. The
+automatic labels agreed with them within 1.1 mm and 2.0 mm. One patient had a strong
+void-like structure that every model detected. Its automatic label was confirmed
+because the CT inter-marker distances matched the labelled triple within 0.8 mm, and
+every alternative triple including the structure within no better than 3.9 mm. No
+prostate contours were derived for this set, and none were needed for marker
+evaluation.
+
+**Inference on the external set.** Each fold model of an arm was applied to the
+external images separately (nnU-Net, CPU, the same settings and test-time mirroring
+as for the out-of-fold predictions). The 5-fold ensemble was the voxel-wise mean of
+the five fold models' probabilities. Single fold models are reported individually,
+because the deployed model is a single network. The released ensemble was applied
+as for the study patients. For constellation selection on this set, the geometric
+prior was fitted on the reference markers of all 127 study patients, λ was fixed at
+0.1 (the value chosen by inner cross-validation in 9 of the 10 outer folds of 511
+and 513), and K was the number of reference markers. The external set was analysed
+after the study-set analyses of 501, 511, 512 and 513 were complete. It was then used,
+together with the study-set results, to choose the deployed configuration. Because
+the external set informed that choice, its results for the chosen configuration are
+not a fully blind estimate. [pending: the 250-epoch and 521 models are applied to it
+when their training finishes.]
+
 ## Label variants
 
 Three label variants were built on the same images, each with classes 0

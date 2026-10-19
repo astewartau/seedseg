@@ -9,12 +9,17 @@ Last updated: 2026-10-19 (final_end check, job 29940934).
 
 ## Decisions (2026-10-19, made by Claude at Ashley's request: "submit as soon as possible")
 
-Goal: submit the revised paper as soon as the running jobs finish, with no manual annotation. The Needs
+Goal: Ashley will resubmit to another journal with the v2 models and findings. **Ashley does no further manual work**:
+only what Claude can do. Claude may look into improvements. The Needs
 Ashley items below are resolved as follows:
-1. **Fresh 2025 test set: dropped.** Only 1 patient is labellable without manual work. Auto-labelling the
-   others (CT-only marker detection, CT→MR registration without REG) would need its own validation,
-   and labelling them with the model's output is circular. State this as a limitation; the 127-subject
-   out-of-fold CV is the main evaluation.
+1. **Fresh test set: being built automatically** (Ashley's idea, 2026-10-19), with zero manual annotation:
+   - CT markers found by intensity threshold;
+   - matched to MR voids (the hand-crafted void map, not the network) by inter-marker distances;
+   - rigid fit, then void refinement.
+
+   It is validated first on the 127 against the corrected references (acceptance rule set on one half,
+   reported on the other). Output: `prostate-v2/fresh/`, code `scripts/labels/auto_ct_labels.py`. If it
+   doesn't validate, drop the fresh test and state it as a limitation.
 2. **Main model: 513 + constellation selection (K = implant count) + count flag**, unless the 250-epoch
    3-run average + constellation beats it on all 127 (decided by the `rerun_end` check, same metrics).
    Primary contrasts, pre-specified: 511 vs 501 (label fix), 513 vs 511 (synthetic data), 512 vs released

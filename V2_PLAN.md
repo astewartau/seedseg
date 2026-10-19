@@ -539,12 +539,13 @@ When all 5 folds of a dataset have `checkpoint_final.pth`:
   human check. Note for the methods: the constellation-shape check only
   validates markers that were snapped to a void; the 17 low-void markers were
   covered by the visual QC instead.
-- **Backup.** `scripts/backup_v2_to_rdm.sh` writes dated snapshots to
-  `/QRISdata/Q0748/data/prostate/v2-work/`: a data tar, a git bundle of all
-  branches, and this plan. The first snapshot was taken on 2026-10-16. **Re-run it
-  after training finishes**; it picks up the trained models (checkpoint_final and
-  plans). Nothing is pushed to GitHub, because the records hold patient study IDs
-  and the repo is public.
+- **Backup (reorganised 2026-10-19).** `scripts/backup_v2_to_rdm.sh` mirrors everything to an
+  organised tree at **`/QRISdata/Q0748/data/prostate/v2/`**: docs, code bundle, study/synthetic/external
+  data, models, predictions, evaluation, archive. The `README.md` there describes the layout,
+  provenance and what is regenerable. The sync is incremental rsync and never deletes. Re-run it after
+  new models or results. The old dated tars (`v2-work/`) were moved to `v2/archive/snapshots-2026-10/`;
+  once the new tree is verified, Ashley can delete them to free about 51 GB.
+  Nothing is pushed to GitHub, because the records hold patient study IDs and the repo is public.
 - **Smoke test: done.** 29913696 completed on 16 Oct (6 min, 26.9 s per epoch; the
   first epoch takes 140 s because of compile/warm-up). It was a training-only run,
   so the orientation check in `export_probs.py` hasn't run yet. It first runs

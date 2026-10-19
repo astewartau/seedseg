@@ -99,7 +99,10 @@ def main():
             kept = kept[[np.linalg.norm(exref - q, axis=1).min() > a.tol_mm for q in kept]] if len(kept) else kept
         m, _ = match(kept, ref, a.tol_mm)
         tp = len(m); fn = len(ref) - tp; fp = len(kept) - tp
+        # reference markers with at least one candidate within tol (each marker counted once)
+        ref_with_cand = int(sum((np.linalg.norm(cpos - r, axis=1) <= a.tol_mm).any() for r in ref)) if len(cpos) else 0
         per.append(dict(subject=sid, n_excluded=len(exref), n_ref=len(ref), n_det=len(kept), n_cand=len(cs), tp=tp, fn=fn, fp=fp,
+                        ref_with_cand=ref_with_cand,
                         perfect=(fn == 0 and fp == 0), loc_err_mm=float(np.mean([d for _, _, d in m])) if m else np.nan))
         cands_all += cs
     P = pd.DataFrame(per); C = pd.DataFrame(cands_all)
@@ -115,7 +118,7 @@ def main():
                 sensitivity=TP / (TP + FN), sens_cp95=clopper_pearson(TP, TP + FN), sens_boot95=tuple(np.percentile(bs[:, 0], [2.5, 97.5])),
                 precision=TP / max(TP + FP, 1), prec_cp95=clopper_pearson(TP, TP + FP), prec_boot95=tuple(np.percentile(bs[:, 1], [2.5, 97.5])),
                 perfect=int(P.perfect.sum()), loc_err_mm_median=float(P.loc_err_mm.median()),
-                cand_recall=float(C.groupby('subject').is_marker.sum().sum() / (TP + FN)) if len(C) else 0.0,
+                cand_recall=float(P.ref_with_cand.sum() / max(TP + FN, 1)),
                 settings=dict(threshold=a.threshold, score=a.score if resc is None else f'rescore:{a.score}', top_k=a.top_k, tol_mm=a.tol_mm))
     json.dump(summ, open(a.out + '_summary.json', 'w'), indent=1, default=float)
     print(f"{len(P)} subj | sens {TP}/{TP+FN} = {summ['sensitivity']:.1%} | prec {TP}/{TP+FP} = {summ['precision']:.1%} | perfect {summ['perfect']}/{len(P)} | loc err {summ['loc_err_mm_median']:.2f} mm")

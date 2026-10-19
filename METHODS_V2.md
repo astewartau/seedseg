@@ -1,31 +1,44 @@
 # Methods (SeedSeg v2, draft)
 
 Draft methods for the revision of the preprint (bioRxiv 10.64898/2026.06.18.733061).
-Items marked **[pending]** were still running on 2026-10-19. Items marked
-**[check: …]** need confirmation before submission.
+Items marked **[pending]** were still running on 2026-10-19.
 
 ## Data and cohort
 
 The study used the cohort of the preprint: 127 patients undergoing prostate
 radiotherapy with implanted gold fiducial markers, each with a T1-weighted MRI and
 a clinical radiotherapy structure set. Images were acquired on a 3T scanner
-(Siemens Skyra) with an axial 2D FLASH sequence (TR/TE 600/6.66 ms, flip angle 80°,
+(Siemens Skyra) with an axial 2D FLASH sequence (TE 6.66 ms, flip angle 80°,
 0.6875 × 0.6875 × 2.0 mm voxels, matrix 320 × 320 × 40; one examination had 42
-slices). Multi-channel magnitude images were used. Each image was corrected for
+slices). The 61 examinations from 2020–2021 were acquired with software version
+E11 and TR 689 ms, and the 66 from 2025–2026, including all 25 test patients,
+with software version XA60 and TR 600 ms; geometry and the other parameters were
+unchanged. Because the exported headers were de-identified, the protocol
+parameters were taken from series exported directly from the scanner in each
+period. Multi-channel magnitude images were used. Each image was corrected for
 intensity inhomogeneity with N4 (SimpleITK `N4BiasFieldCorrection`, default
-parameters, Otsu foreground mask), as in the preprint, and used without further
-preprocessing [check: that the 127 images were all produced by this script].
+parameters, mask from SimpleITK `OtsuThreshold` with 200 histogram bins), as in
+the preprint, and used without further preprocessing. All 127 images were the
+preprint's `*_MRI_homogeneity-corrected.nii` files, produced with this same
+correction function (preprint scripts `homogeneity_correction.py` and
+`prepare_test_data.py`, and a one-off script applying the same function to two
+training patients). One test image was an online reconstruction by a
+vendor-platform application rather than the standard scanner reconstruction, with
+an intensity scale about 2.6 times that of the other test images. It was kept
+as acquired; the network input was z-score normalised per image.
 
 The 127 patients comprise the preprint's 93 training, 9 validation and 25 test
 patients. The 25 test patients were acquired after the other 102 (temporal
-split). Patients in the original data collection were excluded from the 127
-if they lacked the T1-weighted marker sequence (two patients) or if their
-reference labels could not be derived (one patient). Two further patients were
-excluded because they were not prostate examinations [check: confirm this
-reason and these counts against the preprint; two entries in the original
-training list have no image in the 127]. T1-weighted patients acquired in 2025
-were not included [check: reason for leaving them out, or state that they were
-acquired after the data freeze].
+split). Of the patients in the original training collection, two lacked the
+T1-weighted marker sequence and one had a registration linking the CT to a
+different MR frame of reference than the T1-weighted series, so its labels could
+not be derived; all three were excluded, as in the preprint. Two further patients
+listed in the preprint's training split had no marker contours in their
+structure sets (one had only a CTV, the other only a body contour) and were
+excluded, which leaves the preprint's 93 training patients. Other patients with
+a T1-weighted examination who were scanned in 2025 were not included because they
+had no usable reference labels: no structure set or registration on the
+T1-weighted frame of reference, or no marker contours.
 
 The primary analysis was 5-fold cross-validation over all 127 patients. Fold
 membership was assigned once, by shuffling the sorted patient list with a fixed
@@ -117,9 +130,8 @@ previous CTV was correct, the new CTV agreed with it with a median Dice of 0.95.
   (low void strength, accepted refinement, mismatched or missing registration,
   ambiguous MR series, two-marker patients; 66 markers) was reviewed on five
   contiguous slices (42 mm field of view) by one author (A.S.). One marker was
-  rejected: there was no MR void at its CT-confirmed position (V = 0.44)
-  [check: whether a sample of unflagged markers was also reviewed by A.S., and
-  whether to report the preliminary automated screen].
+  rejected: there was no MR void at its CT-confirmed position (V = 0.44).
+  Unflagged markers were not reviewed visually.
 
 **Ignore label.** The rejected marker was given label 3 over its 3 mm sphere, in
 the corrected label and in the synthetic cases derived from that patient
@@ -235,8 +247,8 @@ rotation-invariant descriptor, giving a per-void posterior over (θ, Δχ); the
 pooled posterior defined the generation prior. A fresh set of 361 simulations
 drawn from the prior was then compared with the real set by two-sample
 Kolmogorov–Smirnov tests. The orientation prior used for generation came from
-the fit with fixed N = 10 [check: whether to refit it with N ∈ [6, 14]; the
-reported comparison below uses N ∈ [6, 14]]. Medians [IQR], real vs simulated:
+the fit with a fixed coil count N = 10 and was used unchanged when N was drawn
+from [6, 14] for generation; the comparison below uses N ∈ [6, 14]. Medians [IQR], real vs simulated:
 minimum intensity relative to the CTV median 0.34 [0.29–0.39] vs 0.33
 [0.29–0.38] (KS p = 0.08); void volume 41.6 [33–55] vs 43.5 [29–57] mm³
 (p = 0.02); in-plane elongation 1.19 [1.11–1.30] vs 1.18 [1.12–1.29] (p = 0.64);
@@ -279,8 +291,9 @@ design the validation fold is also the evaluation fold.
 For the repeat-run analysis, 511 was additionally trained three times with
 `nnUNetTrainer_250epochs` (identical except for 250 epochs, so the learning rate
 decays over 250 epochs), in separate results directories (r1–r3), on the same
-dataset and folds. nnU-Net does not fix a random seed, so the repeats differ in
-initialisation and data sampling [check: confirm no seed was set]. **[pending:
+dataset and folds. nnU-Net 2.8.1 sets no random seed (and runs cuDNN in
+non-deterministic mode), and none was set by us, so the repeats differ in
+initialisation, data sampling and augmentation. **[pending:
 running as of 2026-10-19.]**
 
 Each fold was trained on one NVIDIA H100 GPU (12 CPU cores, 96 GB RAM, 10 data
@@ -347,8 +360,9 @@ prostate was the largest connected component of the same out-of-fold prediction
 patient was used. The KDEs were fitted on the reference markers of the training
 folds only. The search was exhaustive over the 12 candidates with the best
 unary score. K was the number of implanted markers recorded in the clinical
-structure set, standing in for the implant record [check: for the 2 patients
-without a usable structure-set registration, K came from the previous labels].
+structure set, standing in for the implant record; for the two patients without
+a structure-set record, K was the number of markers in their previous labels
+(three in both).
 λ was chosen per outer fold from {0, 0.1, 0.25, 0.5, 1, 2, 4} by inner
 cross-validation over the other four folds (objective: true positives minus
 false positives, with the prior refitted for each inner split); the outer
@@ -384,8 +398,12 @@ positives. Sensitivity was TP/(TP + FN) and precision TP/(TP + FP), pooled over
 markers. A patient was *perfect* if it had no false negative and no false
 positive. The localisation error was the mean distance of matched pairs per
 patient. The same evaluator was applied to every arm, including the released
-ensemble [check: how the released-ensemble probability maps were produced for
-the 127, e.g. the preprint inference pipeline on the same N4 images].
+ensemble. Its marker probability map was the mean of the four released ONNX
+models' marker softmax outputs (ONNX Runtime 1.23.2, CPU), computed on the same
+N4-corrected images with the preprint's inference preprocessing: zero-padding to
+a multiple of 32 voxels per axis, z-score normalisation over the padded volume,
+and cropping back (`scripts/evaluation/infer_released_onnx.py`). This reproduced
+the preprint's test results exactly.
 
 **Populations.** The primary population was all 127 patients with out-of-fold
 predictions. Results were also reported for the 25 temporal test patients and
@@ -401,16 +419,14 @@ used per-marker outcomes: 95% CIs for the differences in sensitivity and
 precision came from a patient-level bootstrap (5000 resamples of patients with
 replacement, fixed seed), and the per-marker discordance was tested with an
 exact McNemar test (two-sided binomial test on the markers found by only one of
-the two arms) [check: the McNemar p-values were computed outside the committed
-scripts; add it to `compare_arms.py` or state the tool].
+the two arms; SciPy `binomtest`, `scripts/evaluation/compare_arms.py`).
 
 **Miss categories.** Each missed marker was classified as *no candidate* (no
 candidate centroid within 5 mm at the 0.1 threshold) or *ranked out* (a
 candidate within 5 mm existed but was not among the kept detections or was not
 matched to it). Candidate recall, the upper bound for any selection rule at
 this threshold, was the fraction of reference markers with a candidate within
-5 mm [check: the `cand_recall` field in `evaluate_detections.py` counts
-candidates, not markers, and can double-count; report the marker-based figure].
+5 mm, each marker counted once.
 
 **Bright fraction.** To examine markers near T1-bright blood products, each
 reference marker was assigned a bright fraction: the proportion of voxels within
@@ -433,8 +449,10 @@ Post hoc, after the 501 and 511 results were seen:
 - Constellation selection. It was developed on the 511 out-of-fold output. Its
   settings (λ grid, inner-CV choice of λ, K = implant count, threshold 0.1) were
   fixed before it was applied to 513 and the other arms, and these settings are
-  the ones referred to as pre-specified in the results [check: confirm that the
-  λ grid and objective were fixed before the first 511 run of the method].
+  the ones referred to as pre-specified in the results. The λ grid and the
+  inner-CV objective were written before the method was first run on 511 and were
+  not changed afterwards. The λ = 0 and fixed K = 3 runs on 511 were sensitivity
+  analyses.
 - The extra low-threshold candidates (10⁻³, 10⁻⁴). These thresholds were chosen
   after looking at the misses, not blind, and results with them are optimistic.
 - The 250-epoch schedule and the repeat-run average, motivated by the training
@@ -447,14 +465,20 @@ Post hoc, after the 501 and 511 results were seen:
   comparisons with averaged probability maps of different arms.
 - Miss categories are descriptive.
 
-No correction for multiple comparisons was applied [check]; paired tests were
-interpreted as exploratory except for the pre-specified contrasts on all 127
-patients.
+No correction for multiple comparisons was applied. The pre-specified primary
+contrasts were on all 127 patients: 511 vs 501 (label correction), 513 vs 511
+(synthetic data) and 521 vs 501 and 511 (label shape vs position); 512 vs the
+released ensemble on the 25 temporal test patients was the pre-specified
+comparison with the preprint. All other paired tests, including contrasts on the
+25 test patients for the cross-validation arms, are exploratory.
 
 ## Software and code
 
 Label derivation, evaluation and post-processing used Python with pydicom,
-nibabel, SciPy, pandas and scikit-learn [check: versions]; the synthetic-marker
-generator used Python 3.9 with NumPy, SciPy and nibabel. Code: `scripts/labels/`,
+nibabel, SciPy, pandas and scikit-learn (Python 3.10.4, NumPy 1.24.3, SciPy
+1.10.1, nibabel 5.2.1, pandas 2.0.3, scikit-learn 1.7.2, pydicom 2.4.4, SimpleITK
+2.5.6). The synthetic-marker generator used Python 3.9.12 with NumPy 2.0.2, SciPy
+1.13.1, nibabel 5.3.3 and pydicom 2.4.4. nnU-Net 2.8.1 ran with PyTorch 2.6.0
+(CUDA 12.4) on Python 3.11.9. Code: `scripts/labels/`,
 `scripts/synth/`, `scripts/nnunet/`, `scripts/evaluation/` and `scripts/rerank/`
 in the SeedSeg repository.

@@ -3,6 +3,7 @@
 and miss categories. Re-derives matching (top-k by rank, 5 mm Hungarian) and checks totals."""
 import json, sys, numpy as np, pandas as pd
 from scipy.optimize import linear_sum_assignment
+from scipy.stats import binomtest
 import nibabel as nib
 P = '/scratch/user/uqaste15/prostate-v2'; R = P + '/eval/results'
 TOL, K = 5.0, 3
@@ -66,7 +67,9 @@ if __name__ == '__main__':
                 m = A.merge(B, on=['subject', 'marker']); m = m[m.subject.isin(sel)]
                 ha = m.cat_x == 'hit'; hb = m.cat_y == 'hit'
                 (ls, hs), (lp, hp) = boot_diff(A, B, fA, fB, sel)
-                print(f"{a} vs {b} {nm}: markers only-{a} {int((ha&~hb).sum())}, only-{b} {int((~ha&hb).sum())}; "
+                na, nb = int((ha & ~hb).sum()), int((~ha & hb).sum())
+                pm = binomtest(na, na + nb).pvalue if na + nb else 1.0  # exact two-sided McNemar on discordant markers
+                print(f"{a} vs {b} {nm}: markers only-{a} {na}, only-{b} {nb} (McNemar p={pm:.3f}); "
                       f"dSens 95% boot [{ls:+.3f},{hs:+.3f}], dPrec [{lp:+.3f},{hp:+.3f}]; FP {fA[sel].sum()} vs {fB[sel].sum()}")
     for k, (O, F) in res.items():
         O.to_csv(f'{P}/eval/analysis/markers_{k}.csv', index=False)

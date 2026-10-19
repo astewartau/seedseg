@@ -9,7 +9,7 @@ SRC=/scratch/user/uqaste15/src
 REPO=$SRC/seedseg
 DEST=${DEST:-/QRISdata/Q0748/data/prostate/v2}
 ONNX=${ONNX:-/home/uqaste15/tmp/claude-1100003445/-home-uqaste15/11ce6247-8f9d-519d-9b98-33e69c3c67a1/scratchpad/models}
-RS=(rsync -a --no-perms --chmod=ug+rwX,o-rwx)
+RS=(rsync -rlt --chmod=ug+rwX,o-rwx)   # no owner/group/perms: the RDM enforces its own group (Q0748RW)
 mkdir -p "$DEST"/{docs,code,data,models,predictions,evaluation,archive}
 cd "$R"
 

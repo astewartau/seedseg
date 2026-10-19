@@ -20,8 +20,12 @@ Ashley items below are resolved as follows:
    It is validated first on the 127 against the corrected references (acceptance rule set on one half,
    reported on the other). Output: `prostate-v2/fresh/`, code `scripts/labels/auto_ct_labels.py`. If it
    doesn't validate, drop the fresh test and state it as a limitation.
-2. **Main model: 513 + constellation selection (K = implant count) + count flag**, unless the 250-epoch
-   3-run average + constellation beats it on all 127 (decided by the `rerun_end` check, same metrics).
+2. **Main model: revised after the fresh test (see that section). Choose the simplest arm with no
+   detectable loss.** Neither synthetic data (513) nor constellation selection shows a benefit on all 127
+   or on the fresh set. The `rerun_end` check makes the final call:
+   - compare 511, 513, the 250-epoch 3-run average, ± constellation, on all 127 OOF and the fresh 9;
+   - if nothing is significantly better, deploy **511, plain top-3 + count flag**, and report synthetic
+     data and constellation as tested without benefit.
    Primary contrasts, pre-specified: 511 vs 501 (label fix), 513 vs 511 (synthetic data), 512 vs released
    (temporal test). 521 and the 250-epoch repeats are secondary.
 3. **521 / 250-epoch reruns:** use them if they finish before the manuscript does (about 20 h).
@@ -369,6 +373,57 @@ and should be given a per-arm `--cache`.
     before replacing the released ONNX models on OSF and in the web app.
   - OpenRecon: the same ONNX plus Python post-processing. Let the implant count come from the user or
     the protocol, with a default of 3.
+
+## Fresh external test: 9 automatically labelled patients (2026-10-19)
+
+**Labels** (`scripts/labels/auto_ct_labels.py`, 30dee0d; data `prostate-v2/fresh/`):
+- Gold is found by a CT intensity threshold, or by RTSTRUCT points where there is no CT.
+- It is matched to the hand-crafted MR void map (not the network) by inter-marker distances, rigidly
+  fitted, then void-refined. No manual annotation.
+- **Validation on the 60 study patients with CT**: rule set on half 0, reported on half 1 (31 patients).
+  - 29 accepted; both rejections really were wrong.
+  - Accepted markers: 83.7% within 2 mm, 98.8% within 3 mm, 100% within 5 mm of the corrected references.
+  - CT detection: 175/176 markers, 0 false.
+  - Caveat: the CT thresholds and the 20 mm L–R limit were chosen looking at all 60.
+- **Fresh set: 9 patients × 3 markers**, all checked by eye:
+  - 2021–23 E11/TR 689: z1438488, z0186251, z1372775, z0381949;
+  - 2025 XA60/TR 600: z1618259, z1679798, z2153014, z3152040, z1224615.
+  - Independent checks: z1224615 is within 1.1 mm of its clinical T1-frame contours, and z3152040 within
+    2.0 mm of its clinical match points.
+- **z1438488** has a strong look-alike void (p ≈ 1 in every model) 22 mm from the references. The reference
+  triple matches the CT inter-marker distances to 0.8 mm; the best alternative triple using the look-alike is
+  3.9 mm off. So the label stands and those misses are real model errors.
+
+**Models** (each CV fold model applied to all 9; ensemble = mean of the 5 fold maps; constellation prior fitted
+on all 127, λ = 0.1 fixed, K = 3; CPU inference job `scripts/nnunet/predict_fresh.slurm` 30124341/30124342;
+driver `scripts/evaluation/eval_fresh.sh`):
+
+| Model | Sensitivity (95% CI) | FP | Perfect |
+|---|---|---|---|
+| Released ensemble | 21/27 = 77.8% (57.7–91.4) | 5 | 4/9 |
+| 511 single fold models (0–4) | 27, 26, 27, 25, 26 /27 (mean 26.2) | 0, 0, 0, 1, 1 | 9, 8, 9, 7, 8 |
+| 511 single + constellation | identical to 511 single | | |
+| **511 5-fold ensemble** | **27/27 = 100% (87.2–100)** | **0** | **9/9** |
+| 513 single fold models (0–4) | 27, 26, 26, 26, 24 /27 (mean 25.8) | 0, 1, 0, 0, 1 | 9, 8, 8, 8, 6 |
+| 513 single + constellation | 26, 26, 25, 25, 24 /27 (mean 25.2) | 1, 1, 1, 1, 1 | 8, 8, 7, 7, 6 |
+| 513 5-fold ensemble (± constellation) | 26/27 = 96.3% (81.0–99.9) | 1 | 8/9 |
+
+Paired (exact McNemar):
+- 511 ensemble vs released: 6/0, p=0.031.
+- 513 ensemble vs released: 6/1, p=0.125.
+
+All new-model errors fall on 2 patients:
+- z0186251: one marker has no candidate in some folds;
+- z1438488: the look-alike outranks a real marker. Constellation selection moves 513 fold 0/2/3 towards
+  the look-alike, which explains its −3.
+
+**Reading.** On an independent, later, automatically labelled set:
+- the v2 models clearly beat the released ensemble (77.8% → 96–100%, FP 5 → 0–1);
+- **511 is at least as good as 513 here, and constellation selection does not help** (it costs 513 one
+  marker in 3 folds).
+
+n = 27 markers, so 511 vs 513 can't be separated. But together with all 127 (513 +3 TP, +3 FP vs 511,
+p=0.66), the evidence that synthetic data or constellation selection help is weak.
 
 ## Follow-up analyses (2026-10-17 evening, requested by Ashley): how to go further
 

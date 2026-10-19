@@ -40,3 +40,13 @@ Tasks:
   - send ONE push notification (PushNotification tool) with a 1–2 line summary: OK, problem found and fixed, or needs Ashley;
     If the tool reports the notification was skipped because the terminal is active, run `sleep 180` in the background, wait for it, and send it once more.
   - then stop. The session stays open so Ashley can read it.
+
+## Added 2026-10-19 (after the fresh external test; see "Fresh external test" in V2_PLAN.md)
+- Also apply the 250-epoch r1–r3 fold models (and the rerun 521) to the 9 fresh patients:
+  `sbatch --array=0-4 --export=ALL,DATASET=511,TRAINER=nnUNetTrainer_250epochs,RESULTS_TAG=r1,IN=/scratch/user/uqaste15/prostate-v2/fresh/nnunet_in,OUT=/scratch/user/uqaste15/prostate-v2/fresh/pred_r1 scripts/nnunet/predict_fresh.slurm`
+  (from the seedseg-nnunet worktree, CPU, about 30 min; likewise r2/r3, and 521 with OUT=.../fresh/pred).
+  Note that `eval_fresh.sh` reads `$F/pred/<id>_fold<f>`, so pass a distinct id or adapt the paths.
+  Evaluate each run, the 3-run average (average fold maps across runs and folds), and ± constellation.
+- **Final model choice** (Decision 2 in V2_PLAN): pick the simplest arm with no detectable loss on
+  all 127 OOF and the fresh 9. Default: 511, plain top-3 + count flag. Write the choice and its reason
+  in "Recommended final model and next steps".

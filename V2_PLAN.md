@@ -246,7 +246,7 @@ model is evaluated on its own held-out subjects:
   missed by 501 and 5 by the released models.
 - 8 misses are **ranking errors**: a candidate exists but a look-alike outranks it, so it falls out of
   the top 3. These account for 7 of the 9 FPs.
-- The candidate recall ceiling is 95.8% (361/377), the same as 501's.
+- The candidate recall ceiling is 362/377 (96.0%; 361 before the cand_recall double-count fix, 65c9f6e).
 - 501 for comparison: 26 misses = 11 ranking + 15 "no candidate". 6 of those 15 have p ≈ 1 nearby
   but a merged or displaced component whose centroid is more than 5 mm away; 9 are truly unsegmented.
   The released models: 22 ranking + 13 no candidate.

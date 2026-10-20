@@ -1,17 +1,26 @@
 export const VERSION = '0.2.6';
 
-// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py), served
-// same-origin from ./models (the deploy workflow downloads them from OSF). seedseg-v2.json
-// holds the patch size, spacing, file names, sizes and SHA-256 digests; each network is
-// downloaded when first used and cached in IndexedDB.
-export const MODEL_BASE_URL = './models';
+// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py), hosted in the
+// Hugging Face model repo ash347/seedseg and pinned to one commit, so the files cannot change
+// under the app. v2/seedseg-v2.json holds the patch size, spacing, file names, sizes and SHA-256
+// digests; each network is downloaded when first used, checked and cached in IndexedDB.
+export const MODEL_HOST = 'https://huggingface.co/ash347/seedseg/resolve/ef4fb8f11a126425cde4b87e5fdca924032626b2';
+export const MODEL_BASE_URL = `${MODEL_HOST}/v2`;
+// Folder of each seedseg-v2.json variant under MODEL_BASE_URL
+export const MODEL_DIRS = { web: 'browser', fp32: 'fp32' };
 
 export const FOLDS = ['0', '1', '2', '3', '4'];
 
 // Legacy v1 model (the previously released 4-network 3D U-Net consensus), Advanced settings only.
-export const LEGACY_MODEL_BASE_URL = './models/legacy';
+export const LEGACY_MODEL_BASE_URL = `${MODEL_HOST}/v1`;
 export const LEGACY_MODELS = ['seedseg-model-seed42.onnx', 'seedseg-model-seed123.onnx',
   'seedseg-model-seed456.onnx', 'seedseg-model-seed789.onnx'];
+export const LEGACY_SHA256 = {
+  'seedseg-model-seed42.onnx': '7dc1ef1875b7027c56950cc3c35f1ffa8d67f7190a49df49811105cd639b784d',
+  'seedseg-model-seed123.onnx': 'bfe4fe9140383e87a6c0c4cb2a6e9a84c3435f1413fd3644273bd9f1a0c3bdee',
+  'seedseg-model-seed456.onnx': '2aa00094e01e978f3d85a882a97f9a1ef59da32341db4aaaf46c0c5388424ae7',
+  'seedseg-model-seed789.onnx': 'e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5'
+};
 
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
@@ -48,4 +57,4 @@ export const CACHE_CONFIG = {
   maxSizeMB: 1100
 };
 
-if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };
+if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, MODEL_DIRS, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };

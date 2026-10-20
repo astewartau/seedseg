@@ -148,7 +148,7 @@ async function fetchModel(baseUrl, entry, label, progressBase, progressSpan) {
 async function runInference(config) {
   const { inputData, settings } = config;
   const {
-    folds = ['0'], mirror = false, threshold = 0.1, nMarkers = 3, modelBaseUrl,
+    folds = ['0'], mirror = false, threshold = 0.1, nMarkers = 3, modelBaseUrl, modelDir = 'browser',
     model = 'web', backend = 'auto', biasCorrection = 'makehomogeneous'
   } = settings;
   const tStart = performance.now();
@@ -215,7 +215,7 @@ async function runInference(config) {
     // One file for both backends (the graph is rewritten for WebGPU, scripts/deploy/rewrite_for_webgpu.py):
     // WebGPU first, WebAssembly if it is unavailable or fails.
     const entry = manifest.folds[f][model];
-    const modelData = await fetchModel(modelBaseUrl, entry, `network ${Number(f) + 1}`, base, perFoldSpan * 0.3);
+    const modelData = await fetchModel(`${modelBaseUrl}/${modelDir}`, entry, `network ${Number(f) + 1}`, base, perFoldSpan * 0.3);
     for (const be of (activeBackend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'])) {
       postProgress(base + perFoldSpan * 0.3, `Loading network ${Number(f) + 1}...`);
       const t0 = performance.now();

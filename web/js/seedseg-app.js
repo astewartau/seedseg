@@ -814,7 +814,7 @@ class SeedSegApp {
       await this.legacyExecutor.run({
         inputData,
         settings: {
-          selectedModels: Config.LEGACY_MODELS, threshold, nMarkers,
+          selectedModels: Config.LEGACY_MODELS, sha256: Config.LEGACY_SHA256, threshold, nMarkers,
           modelBaseUrl: new URL(Config.LEGACY_MODEL_BASE_URL, window.location.href).href
         }
       });
@@ -830,6 +830,7 @@ class SeedSegApp {
         mirror,
         backend,
         model: Config.INFERENCE_DEFAULTS.model,
+        modelDir: Config.MODEL_DIRS[Config.INFERENCE_DEFAULTS.model],
         threshold,
         nMarkers,
         modelBaseUrl

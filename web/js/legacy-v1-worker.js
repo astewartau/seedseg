@@ -418,12 +418,13 @@ function averageProbabilityMaps(maps) {
 
 // ==================== Model Loading ====================
 
-async function fetchModel(url, modelName, progressBase, progressSpan) {
+async function fetchModel(url, modelName, progressBase, progressSpan, sha256) {
   const displayName = modelName || url.split('/').pop();
+  const key = sha256 ? `seedseg-v1:${sha256}` : url;
 
   // Check cache first
   try {
-    const cached = await localforage.getItem(url);
+    const cached = await localforage.getItem(key);
     if (cached && cached.byteLength > 1000000) {
       postLog(`Model loaded from cache: ${displayName}`);
       postProgress(progressBase + progressSpan, `Cached: ${displayName}`);
@@ -466,9 +467,15 @@ async function fetchModel(url, modelName, progressBase, progressSpan) {
     offset += chunk.length;
   }
 
+  if (sha256) {
+    const h = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data.buffer)))
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (h !== sha256) throw new Error(`${displayName}: checksum mismatch`);
+  }
+
   // Cache for next time
   try {
-    await localforage.setItem(url, data.buffer);
+    await localforage.setItem(key, data.buffer);
   } catch (e) {
     postLog('Warning: Could not cache model (storage full?)');
   }
@@ -483,6 +490,7 @@ async function runInference(config) {
   const { inputData, settings } = config;
   const {
     selectedModels,
+    sha256 = {},
     threshold = 0.1,
     nMarkers = 3,
     modelBaseUrl
@@ -526,7 +534,7 @@ async function runInference(config) {
     const runBase = progressBase + dlSpan; // remaining 40% for inference
 
     // Fetch model (with download progress)
-    const modelData = await fetchModel(modelUrl, modelName, progressBase, dlSpan);
+    const modelData = await fetchModel(modelUrl, modelName, progressBase, dlSpan, sha256[modelName]);
 
     // Create ONNX session
     postProgress(runBase, `Loading model ${i + 1}/${totalModels}...`);

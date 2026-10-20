@@ -63,33 +63,8 @@ jobs:
       - name: Download ONNX Runtime WASM
         run: bash web/setup.sh
 
-      # Models are stored on OSF (project f7hjv) and bundled into the site, so the browser
-      # loads them same-origin. Each file is checked against its SHA-256.
-      #   v2: seedseg-v2.json and the 5 nnU-Net networks (*.wg16.onnx: fp16-stored weights,
-      #       fp32 compute; runs on WebGPU and WebAssembly), OSF folder seedseg-v2/
-      #   legacy: the v1 4-network U-Net (Advanced settings only)
-      - name: Download models from OSF
-        run: |
-          OSF="https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage"
-          while read -r path id sha; do
-            [ -n "$path" ] || continue
-            case "$id" in *TODO*) echo "::error::No OSF file id for $path"; exit 1;; esac
-            mkdir -p "web/models/$(dirname "$path")"
-            curl -fL --retry 3 -o "web/models/$path" "$OSF/$id"
-            echo "$sha  web/models/$path" | sha256sum -c -
-          done <<'EOF'
-          seedseg-v2.json            6ad6faac4d4e9c7ec8b5a7ac  7128fa5430feb5c34f3d0ba524f153d619748cd062b25ae96f9f8576c6a6400a
-          seedseg-v2_fold0.wg16.onnx 6ad71c6b4b5ea2903fb5a6bd  c0a52e89279d27231bff814de7cedda5d5de98548e47fc82173ba4a2ea4f7237
-          seedseg-v2_fold1.wg16.onnx 6ad71c754b5ea2903fb5a6de  b2f43e87dc99a3253ec911d6bd928429336934afaa3bb3f460ab8652a483161e
-          seedseg-v2_fold2.wg16.onnx 6ad71c800ceccd387cb5a72a  99244d0f73753ec84d8e9d15ecd163a1fa5ac937d971294e79152013e042e677
-          seedseg-v2_fold3.wg16.onnx 6ad71c8b450c50fac049f10f  57d2add24a99ce86855bcc362d459419a40846e90590a0c42cdc26a02f16f119
-          seedseg-v2_fold4.wg16.onnx 6ad71c960bd6b53106c4cf30  fa577b9e8502d91862e25fef9645bae82df58454a6e061951c2dc292d209c171
-          legacy/seedseg-model-seed42.onnx  69a7b3b11bb961e0a3e7d1d3 7dc1ef1875b7027c56950cc3c35f1ffa8d67f7190a49df49811105cd639b784d
-          legacy/seedseg-model-seed123.onnx 69a7b3b0a32ec43a2279789d bfe4fe9140383e87a6c0c4cb2a6e9a84c3435f1413fd3644273bd9f1a0c3bdee
-          legacy/seedseg-model-seed456.onnx 69a7b3b13233e4a733e7d719 2aa00094e01e978f3d85a882a97f9a1ef59da32341db4aaaf46c0c5388424ae7
-          legacy/seedseg-model-seed789.onnx 69a7b3b1a32ec43a2279789f e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5
-          EOF
-          ls -lhR web/models/
+      # Models are not bundled: the app downloads them on demand from the Hugging Face model
+      # repo ash347/seedseg at a pinned commit (web/js/app/config.js) and checks each file's SHA-256.
 
       - name: Prepare deployment
         run: |
@@ -102,7 +77,6 @@ jobs:
           cp -r web/wasm deploy/
           cp -r web/dcm2niix deploy/
           cp -r web/nifti-js deploy/
-          cp -r web/models deploy/
           du -sh deploy
 
       - name: Setup Pages

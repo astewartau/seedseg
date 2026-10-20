@@ -11,7 +11,7 @@ Detection of gold fiducial markers in T1-weighted prostate MRI. The deployed mod
 
 ## Web app
 
-The `web/` directory contains a browser-based version of the inference pipeline. All computation runs locally in the browser using ONNX Runtime Web (WASM backend). No data is uploaded to any server.
+The `web/` directory contains a browser-based version of the inference pipeline. All computation runs locally in the browser using ONNX Runtime Web (WebGPU where available, otherwise WebAssembly). No data is uploaded to any server.
 
 ### Setup
 
@@ -19,17 +19,13 @@ The `web/` directory contains a browser-based version of the inference pipeline.
 # 1. Download ONNX Runtime WASM files
 cd web && bash setup.sh
 
-# 2. Put the ONNX folds and seedseg-v2.json in web/models/, e.g. export them from a
-#    trained nnU-Net model folder (needs nnunetv2, onnx, onnxconverter-common):
-python ../scripts/deploy/export_onnx.py --model <nnUNet_results/Dataset.../nnUNetTrainer__nnUNetResEncUNetMPlans__3d_fullres> \
-    --out models
-python ../scripts/deploy/make_w16.py models   # fp16-stored weights (the web app's default download)
-
-# 3. Start development server
-cd web && bash run.sh
+# 2. Start development server
+bash run.sh
 ```
 
 Then open http://localhost:8080 and upload a T1-weighted prostate MRI (NIfTI or DICOM).
+
+The model weights are downloaded on first use from the Hugging Face model repository [ash347/seedseg](https://huggingface.co/ash347/seedseg) and cached in the browser. To use your own exported models, point `MODEL_BASE_URL` in `web/js/app/config.js` at a folder containing `seedseg-v2.json` and the networks (`scripts/deploy/export_onnx.py`, then `scripts/deploy/make_w16.py` and `scripts/deploy/rewrite_for_webgpu.py`).
 
 ## Python pipeline
 

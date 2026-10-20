@@ -1,4 +1,4 @@
-export const VERSION = '0.2.6';
+export const VERSION = '0.3.0';
 
 // Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py), hosted in the
 // Hugging Face model repo ash347/seedseg and pinned to one commit, so the files cannot change

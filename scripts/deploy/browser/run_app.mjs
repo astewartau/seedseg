@@ -20,8 +20,11 @@ page.on('console', (m) => { if (m.type() === 'error') console.error('[page]', m.
 page.on('pageerror', (e) => console.error('[pageerror]', e.message));
 await page.goto(url);
 await page.waitForFunction(() => window.app && window.app.inferenceExecutor && window.app.inferenceExecutor.isReady(), null, { timeout: 120000 });
-const env = await page.evaluate(() => ({ coi: self.crossOriginIsolated, cores: navigator.hardwareConcurrency, gpu: !!navigator.gpu,
-  adapter: navigator.gpu ? !!(1) : false }));
+const env = await page.evaluate(async () => {
+  const a = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
+  return { coi: self.crossOriginIsolated, cores: navigator.hardwareConcurrency, gpu: !!navigator.gpu,
+    adapter: a ? (a.info ? `${a.info.vendor} ${a.info.architecture} ${a.info.description}`.trim() || 'yes' : 'yes') : null };
+});
 console.log('page', JSON.stringify(env));
 // the app sorts dropped NIfTIs into the T1w slot by name
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seedseg-'));

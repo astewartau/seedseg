@@ -1,7 +1,7 @@
 // Drive the web app headless (Playwright Chromium): load a NIfTI, run SeedSeg, save the
 // marker probability map and detections. Used for browser parity and timing.
 //   node run_app.mjs --url http://localhost:8080/ --input t1.nii --out prefix
-//        [--folds 0,1,2,3,4] [--mirror] [--backend wasm|webgpu] [--bias makehomogeneous|none] [--k 3]
+//        [--folds 0,1,2,3,4] [--mirror] [--backend wasm|webgpu|auto] [--bias makehomogeneous|none] [--k 3]
 // Needs `npm i playwright` and PLAYWRIGHT_BROWSERS_PATH with Chromium installed.
 import fs from 'fs';
 import os from 'os';
@@ -13,8 +13,10 @@ const url = arg('url', 'http://localhost:8080/'), input = arg('input'), out = ar
 const folds = String(arg('folds', '0')).split(','), mirror = process.argv.includes('--mirror');
 const backend = arg('backend', 'wasm'), bias = arg('bias', 'makehomogeneous'), k = +arg('k', 3);
 
-const browser = await chromium.launch({ args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan',
-  '--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--js-flags=--max-old-space-size=8192'] });
+// BROWSER_FLAGS overrides the GPU flags, e.g. on an NVIDIA node with Vulkan:
+//   "--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan --ignore-gpu-blocklist"
+const gpuFlags = (process.env.BROWSER_FLAGS || '--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=swiftshader --use-webgpu-adapter=swiftshader').split(' ');
+const browser = await chromium.launch({ args: [...gpuFlags, '--js-flags=--max-old-space-size=8192'] });
 const page = await browser.newPage();
 page.on('console', (m) => { if (m.type() === 'error') console.error('[page]', m.text()); });
 page.on('pageerror', (e) => console.error('[pageerror]', e.message));

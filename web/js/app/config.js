@@ -13,7 +13,7 @@ export const INFERENCE_DEFAULTS = {
   folds: ['0'],
   mirror: false,
   precision: 'w16',   // fp16-stored weights, fp32 compute (half the download of fp32)
-  backend: 'wasm'     // ONNX Runtime Web 1.23 WebGPU has no Conv3d kernel
+  backend: 'wasm'     // ONNX Runtime Web 1.30 WebGPU lacks 3D ConvTranspose, so WASM only
 };
 
 export const VIEWER_CONFIG = {

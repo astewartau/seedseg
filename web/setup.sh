@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$SCRIPT_DIR/wasm"
 
 # ONNX Runtime Web
-ORT_VERSION="1.23.2"
+ORT_VERSION="1.30.0"
 ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist"
 
 echo "Downloading ONNX Runtime Web v${ORT_VERSION}..."

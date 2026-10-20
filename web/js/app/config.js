@@ -1,19 +1,34 @@
 export const VERSION = '0.2.6';
 
-// Models - relative path (served from same origin, downloaded from OSF at deploy time)
-export const MODEL_BASE_URL = './models';
+// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py), hosted in the
+// Hugging Face model repo ash347/seedseg and pinned to one commit, so the files cannot change
+// under the app. v2/seedseg-v2.json holds the patch size, spacing, file names, sizes and SHA-256
+// digests; each network is downloaded when first used, checked and cached in IndexedDB.
+export const MODEL_HOST = 'https://huggingface.co/ash347/seedseg/resolve/ef4fb8f11a126425cde4b87e5fdca924032626b2';
+export const MODEL_BASE_URL = `${MODEL_HOST}/v2`;
+// Folder of each seedseg-v2.json variant under MODEL_BASE_URL
+export const MODEL_DIRS = { web: 'browser', fp32: 'fp32' };
 
-export const MODELS = [
-  { name: 'seedseg-model-seed42.onnx', label: 'Model 1 (seed 42)', seed: 42 },
-  { name: 'seedseg-model-seed123.onnx', label: 'Model 2 (seed 123)', seed: 123 },
-  { name: 'seedseg-model-seed456.onnx', label: 'Model 3 (seed 456)', seed: 456 },
-  { name: 'seedseg-model-seed789.onnx', label: 'Model 4 (seed 789)', seed: 789 }
-];
+export const FOLDS = ['0', '1', '2', '3', '4'];
+
+// Legacy v1 model (the previously released 4-network 3D U-Net consensus), Advanced settings only.
+export const LEGACY_MODEL_BASE_URL = `${MODEL_HOST}/v1`;
+export const LEGACY_MODELS = ['seedseg-model-seed42.onnx', 'seedseg-model-seed123.onnx',
+  'seedseg-model-seed456.onnx', 'seedseg-model-seed789.onnx'];
+export const LEGACY_SHA256 = {
+  'seedseg-model-seed42.onnx': '7dc1ef1875b7027c56950cc3c35f1ffa8d67f7190a49df49811105cd639b784d',
+  'seedseg-model-seed123.onnx': 'bfe4fe9140383e87a6c0c4cb2a6e9a84c3435f1413fd3644273bd9f1a0c3bdee',
+  'seedseg-model-seed456.onnx': '2aa00094e01e978f3d85a882a97f9a1ef59da32341db4aaaf46c0c5388424ae7',
+  'seedseg-model-seed789.onnx': 'e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5'
+};
 
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
   nMarkers: 3,
-  padFactor: 32
+  folds: ['0'],
+  mirror: false,
+  model: 'web',      // seedseg-v2.json entry: *.wg16.onnx, fp16-stored weights, fp32 compute (WebGPU and WebAssembly)
+  backend: 'auto'    // WebGPU when available, else WebAssembly
 };
 
 export const VIEWER_CONFIG = {
@@ -32,23 +47,14 @@ export const PROGRESS_CONFIG = {
 
 export const STAGE_NAMES = {
   'input': 'Input T1w',
-  'model1': 'Model 1',
-  'model2': 'Model 2',
-  'model3': 'Model 3',
-  'model4': 'Model 4',
-  'avgProb': 'Avg Prob',
-  'consensus': 'Consensus'
-};
-
-export const ONNX_CONFIG = {
-  executionProviders: ['wasm'],
-  graphOptimizationLevel: 'all'
+  'probability': 'Probability',
+  'markers': 'Markers'
 };
 
 export const CACHE_CONFIG = {
   name: 'SeedSegModelCache',
   storeName: 'models',
-  maxSizeMB: 500
+  maxSizeMB: 1100
 };
 
-if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, MODELS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, ONNX_CONFIG, CACHE_CONFIG };
+if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, MODEL_DIRS, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };

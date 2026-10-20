@@ -1953,3 +1953,40 @@ input[type="range"]:disabled::-moz-range-thumb {
 .dicompare-unchecked-content {
   border-top: 1px solid var(--color-border);
 }
+
+/* Detections (marker list + count flag) */
+.detections-panel {
+  margin-bottom: var(--space-sm);
+  font-size: 0.8rem;
+}
+.detections-panel.hidden { display: none; }
+.detections-flag {
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-xs);
+  border-radius: 4px;
+  border: 1px solid var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-text);
+}
+.detections-flag.warn {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.detections-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.detections-table th,
+.detections-table td {
+  padding: 2px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--color-border);
+}
+.detections-table th:first-child,
+.detections-table td:first-child { text-align: left; }
+.detections-table tr.clickable { cursor: pointer; }
+.detections-table tr.clickable:hover { background: var(--color-surface-elevated); }
+.detections-meta {
+  color: var(--color-text-muted);
+  margin-top: var(--space-xs);
+}

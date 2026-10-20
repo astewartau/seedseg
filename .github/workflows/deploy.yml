@@ -63,17 +63,8 @@ jobs:
       - name: Download ONNX Runtime WASM
         run: bash web/setup.sh
 
-      - name: Download ONNX models from OSF
-        run: |
-          mkdir -p web/models
-          OSF_BASE="https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage"
-          echo "Downloading ONNX models from OSF..."
-          curl -L -o web/models/seedseg-model-seed42.onnx   "$OSF_BASE/69a7b3b11bb961e0a3e7d1d3"
-          curl -L -o web/models/seedseg-model-seed123.onnx  "$OSF_BASE/69a7b3b0a32ec43a2279789d"
-          curl -L -o web/models/seedseg-model-seed456.onnx  "$OSF_BASE/69a7b3b13233e4a733e7d719"
-          curl -L -o web/models/seedseg-model-seed789.onnx  "$OSF_BASE/69a7b3b1a32ec43a2279789f"
-          echo "Models downloaded:"
-          ls -lh web/models/
+      # Models are not bundled: the app downloads them on demand from the Hugging Face model
+      # repo ash347/seedseg at a pinned commit (web/js/app/config.js) and checks each file's SHA-256.
 
       - name: Prepare deployment
         run: |
@@ -86,7 +77,7 @@ jobs:
           cp -r web/wasm deploy/
           cp -r web/dcm2niix deploy/
           cp -r web/nifti-js deploy/
-          cp -r web/models deploy/
+          du -sh deploy
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

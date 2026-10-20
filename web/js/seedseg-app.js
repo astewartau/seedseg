@@ -77,8 +77,19 @@ class SeedSegApp {
       onStageData: (data) => this.handleStageData(data),
       onComplete: () => this.onInferenceComplete(),
       onError: (msg) => this.onInferenceError(msg),
-      onInitialized: () => {}
+      onInitialized: () => {},
+      onDetections: (det) => this.showDetections(det)
     });
+    // Legacy v1 consensus, separate worker, created on first use
+    this.legacyExecutor = new InferenceExecutor({
+      workerPath: 'js/legacy-v1-worker.js',
+      updateOutput: (msg) => this.updateOutput(msg),
+      setProgress: (val, text) => this.setProgress(val, text),
+      onStageData: (data) => this.handleStageData(data),
+      onComplete: () => this.onInferenceComplete(),
+      onError: (msg) => this.onInferenceError(msg)
+    });
+    this.activeExecutor = this.inferenceExecutor;
 
     // Modals
     this.aboutModal = new ModalManager('aboutModal');
@@ -115,6 +126,16 @@ class SeedSegApp {
   setupEventListeners() {
     // Unified file input
     this._setupUnifiedDropZone();
+
+    document.getElementById('selectAllFolds')?.addEventListener('click', () => {
+      Config.FOLDS.forEach((f) => { const cb = document.getElementById(`fold${f}`); if (cb) cb.checked = true; });
+    });
+
+    // The legacy v1 model ignores the network and mirroring settings
+    document.getElementById('legacyModel')?.addEventListener('change', (e) => {
+      const ids = [...Config.FOLDS.map((f) => `fold${f}`), 'mirrorTTA', 'selectAllFolds'];
+      ids.forEach((id) => { const el = document.getElementById(id); if (el) el.disabled = e.target.checked; });
+    });
 
     // Run button
     const runBtn = document.getElementById('runSegmentation');
@@ -762,19 +783,15 @@ class SeedSegApp {
     const file = this.fileIOController.getActiveFile();
 
     // Gather settings
-    const selectedModels = [];
-    Config.MODELS.forEach((model, i) => {
-      const cb = document.getElementById(`model${i}`);
-      if (!cb || cb.checked) selectedModels.push(model.name);
-    });
-
-    if (selectedModels.length === 0) {
-      this.updateOutput('No models selected');
+    const folds = Config.FOLDS.filter((f) => document.getElementById(`fold${f}`)?.checked);
+    if (folds.length === 0) {
+      this.updateOutput('No model folds selected');
       return;
     }
-
-    const threshold = parseFloat(document.getElementById('probThreshold')?.value || '0.1');
-    const nMarkers = parseInt(document.getElementById('nMarkers')?.value || '3');
+    const mirror = !!document.getElementById('mirrorTTA')?.checked;
+    const backend = Config.INFERENCE_DEFAULTS.backend;
+    const threshold = parseFloat(document.getElementById('probThreshold')?.value || String(Config.INFERENCE_DEFAULTS.threshold));
+    const nMarkers = parseInt(document.getElementById('nMarkers')?.value || String(Config.INFERENCE_DEFAULTS.nMarkers));
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
 
     // Read file
@@ -788,13 +805,32 @@ class SeedSegApp {
 
     // Clear previous results
     this.inferenceExecutor.clearResults();
+    this.legacyExecutor.clearResults();
     this.disableAllResultTabs();
+
+    if (document.getElementById('legacyModel')?.checked) {
+      this.activeExecutor = this.legacyExecutor;
+      this.updateOutput('Running the legacy v1 model (4-network U-Net consensus)');
+      await this.legacyExecutor.run({
+        inputData,
+        settings: {
+          selectedModels: Config.LEGACY_MODELS, sha256: Config.LEGACY_SHA256, threshold, nMarkers,
+          modelBaseUrl: new URL(Config.LEGACY_MODEL_BASE_URL, window.location.href).href
+        }
+      });
+      return;
+    }
+    this.activeExecutor = this.inferenceExecutor;
 
     // Run
     await this.inferenceExecutor.run({
       inputData,
       settings: {
-        selectedModels,
+        folds,
+        mirror,
+        backend,
+        model: Config.INFERENCE_DEFAULTS.model,
+        modelDir: Config.MODEL_DIRS[Config.INFERENCE_DEFAULTS.model],
         threshold,
         nMarkers,
         modelBaseUrl
@@ -803,7 +839,7 @@ class SeedSegApp {
   }
 
   cancelSegmentation() {
-    this.inferenceExecutor.cancel();
+    this.activeExecutor.cancel();
     const runBtn = document.getElementById('runSegmentation');
     const cancelBtn = document.getElementById('cancelButton');
     if (runBtn) runBtn.disabled = false;
@@ -814,12 +850,10 @@ class SeedSegApp {
 
   static STAGE_NAMES = {
     input: 'Input',
-    model1: 'Model 1',
-    model2: 'Model 2',
-    model3: 'Model 3',
-    model4: 'Model 4',
-    avgProb: 'Average',
-    consensus: 'Consensus'
+    probability: 'Probability',
+    markers: 'Markers',
+    model1: 'v1 net 1', model2: 'v1 net 2', model3: 'v1 net 3', model4: 'v1 net 4',
+    avgProb: 'v1 average', consensus: 'v1 consensus'
   };
 
   handleStageData(data) {
@@ -838,9 +872,9 @@ class SeedSegApp {
     // Add stage button if not already present
     this.addStageButton(data.stage);
 
-    // Auto-show consensus when it arrives
-    if (data.stage === 'consensus') {
-      this.showResult('consensus');
+    // Auto-show the detected markers when they arrive
+    if (data.stage === 'markers' || data.stage === 'consensus') {
+      this.showResult(data.stage);
     }
   }
 
@@ -865,7 +899,7 @@ class SeedSegApp {
       dlBtn.className = 'download-btn';
       dlBtn.title = `Download ${displayName}`;
       dlBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-      dlBtn.addEventListener('click', () => this.inferenceExecutor.downloadStage(stage));
+      dlBtn.addEventListener('click', () => this.activeExecutor.downloadStage(stage));
       item.appendChild(dlBtn);
     }
 
@@ -873,6 +907,15 @@ class SeedSegApp {
   }
 
   onInferenceComplete() {
+    if (this.activeExecutor === this.legacyExecutor) {
+      const panel = document.getElementById('detectionsPanel');
+      const k = document.getElementById('nMarkers')?.value;
+      if (panel) {
+        panel.innerHTML = `<div class="detections-meta">Configuration: legacy model (v1, 4-network U-Net consensus), K = ${k}. ` +
+          'See the v1 consensus result for the selected markers.</div>';
+        panel.classList.remove('hidden');
+      }
+    }
     const runBtn = document.getElementById('runSegmentation');
     const cancelBtn = document.getElementById('cancelButton');
     const statusText = document.getElementById('statusText');
@@ -916,7 +959,7 @@ class SeedSegApp {
       return;
     }
 
-    const result = this.inferenceExecutor.getResult(stage);
+    const result = this.activeExecutor.getResult(stage);
     if (!result?.file || !this.inputFile) return;
 
     // Show overlay controls
@@ -924,7 +967,7 @@ class SeedSegApp {
     if (overlayColormapSelect) overlayColormapSelect.classList.remove('hidden');
 
     // Determine colormap based on stage type
-    const colormap = (stage === 'consensus') ? 'red' : 'warm';
+    const colormap = (stage === 'markers' || stage === 'consensus') ? 'red' : 'warm';
 
     // Sync overlay colormap select
     if (overlayColormapSelect) overlayColormapSelect.value = colormap;
@@ -934,9 +977,43 @@ class SeedSegApp {
   }
 
   disableAllResultTabs() {
-    // Clear dynamically added stage buttons
+    // Clear dynamically added stage buttons and the marker list
     const container = document.getElementById('stageButtons');
     if (container) container.innerHTML = '';
+    const panel = document.getElementById('detectionsPanel');
+    if (panel) { panel.innerHTML = ''; panel.classList.add('hidden'); }
+  }
+
+  /** Marker list: rank, mean probability, position; count flag when fewer than K were found. */
+  showDetections(det) {
+    const panel = document.getElementById('detectionsPanel');
+    if (!panel) return;
+    const n = det.markers.length;
+    const flag = det.countFlag
+      ? `<div class="detections-flag warn"><strong>Check:</strong> ${n} of ${det.k} markers found (${det.nCandidates} candidate${det.nCandidates === 1 ? '' : 's'}). Review the image.</div>`
+      : `<div class="detections-flag">${n} of ${det.k} markers found.</div>`;
+    const rows = det.markers.map((m) => {
+      const w = m.centroidWorldMm.map((v) => v.toFixed(1)).join(', ');
+      return `<tr class="clickable" data-vox="${m.centroidVox.join(',')}" title="Voxel ${m.centroidVox.map((v) => v.toFixed(1)).join(', ')}">
+        <td>${m.rank}</td><td>${m.meanProb.toFixed(3)}</td><td>${m.volumeMm3.toFixed(0)}</td><td>${w}</td></tr>`;
+    }).join('');
+    const next = det.others.length ? `Next candidate: mean probability ${det.others[0].meanProb.toFixed(3)}.` : '';
+    const nets = det.folds.length === 5 ? '5-network ensemble' : `network${det.folds.length > 1 ? 's' : ''} ${det.folds.map((f) => Number(f) + 1).join(', ')} of 5`;
+    const t = ` Configuration: ${nets}, mirroring ${det.mirror ? 'on' : 'off'}, K = ${det.k}, ${det.backend === 'webgpu' ? 'WebGPU' : det.backend === 'wasm' ? 'WebAssembly' : det.backend}` +
+      (det.timing?.total ? `, ${det.timing.total.toFixed(0)} s.` : '.');
+    panel.innerHTML = `${flag}<table class="detections-table"><thead><tr><th>#</th><th>Mean p</th><th>mm³</th><th>Position (mm)</th></tr></thead>
+      <tbody>${rows}</tbody></table><div class="detections-meta">${next}${t}</div>`;
+    panel.classList.remove('hidden');
+    panel.querySelectorAll('tr.clickable').forEach((tr) => {
+      tr.addEventListener('click', () => {
+        const v = tr.dataset.vox.split(',').map(Number);
+        const vol = this.nv.volumes?.[0];
+        if (!vol) return;
+        const frac = [0, 1, 2].map((i) => (v[i] + 0.5) / vol.dims[i + 1]);
+        this.nv.scene.crosshairPos = frac;
+        this.nv.updateGLVolume();
+      });
+    });
   }
 
   clearResults() {

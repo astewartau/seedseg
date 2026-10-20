@@ -49,7 +49,7 @@ done
 [ -d "$ONNX" ] && "${RS[@]}" "$ONNX/" "$DEST/models/released_onnx/"
 
 # predictions: probability maps on the image grid
-for d in nnunet/predictions nnunet/predictions_r*; do
+for d in nnunet/predictions nnunet/predictions_*; do
   [ -d "$d" ] || continue
   "${RS[@]}" --exclude='test_ensemble_raw/' "$d/" "$DEST/predictions/study_$(basename "$d")/"
 done

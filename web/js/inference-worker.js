@@ -107,6 +107,8 @@ async function sha256Hex(buf) {
 }
 
 /** Fetch a model file, caching it in IndexedDB under its SHA-256 (so updates invalidate). */
+let urlFor = (name) => name;
+
 async function fetchModel(baseUrl, entry, label, progressBase, progressSpan) {
   const key = `seedseg-v2:${entry.sha256}`;
   try {
@@ -116,7 +118,7 @@ async function fetchModel(baseUrl, entry, label, progressBase, progressSpan) {
       return cached;
     }
   } catch (e) { /* cache miss */ }
-  const url = `${baseUrl}/${entry.file}`;
+  const url = urlFor(entry.file);
   postLog(`Downloading ${label} (${(entry.bytes / 1048576).toFixed(0)} MB)...`);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch model ${url}: ${response.status} ${response.statusText}`);
@@ -148,14 +150,15 @@ async function fetchModel(baseUrl, entry, label, progressBase, progressSpan) {
 async function runInference(config) {
   const { inputData, settings } = config;
   const {
-    folds = ['0'], mirror = false, threshold = 0.1, nMarkers = 3, modelBaseUrl,
-    precision = 'w16', backend = 'wasm', biasCorrection = 'makehomogeneous'
+    folds = ['0'], mirror = false, threshold = 0.1, nMarkers = 3, modelBaseUrl, modelFileUrls = {},
+    precision = 'w16', backend = 'auto', biasCorrection = 'makehomogeneous'
   } = settings;
   const tStart = performance.now();
   const timing = {};
 
   postProgress(0.01, 'Loading model description...');
-  const manifest = await (await fetch(`${modelBaseUrl}/seedseg-v2.json`, { cache: 'no-cache' })).json();
+  urlFor = (name) => modelFileUrls[name] || `${modelBaseUrl}/${name}`;
+  const manifest = await (await fetch(urlFor('seedseg-v2.json'), { cache: 'no-cache' })).json();
   const patch = manifest.patch_size; // [z, y, x]
   const target = manifest.spacing_zyx;
   const cls = manifest.marker_class;
@@ -198,40 +201,57 @@ async function runInference(config) {
   const nFlips = P.mirrorSets(mirrorAxes).length;
   const steps = P.windowSteps(padded.dims, patch, manifest.tile_step_size);
   const nTiles = steps[0].length * steps[1].length * steps[2].length;
-  postLog(`Sliding window: ${nTiles} patches x ${nFlips} mirrorings x ${folds.length} fold(s), backend ${backend}`);
+  postLog(`Sliding window: ${nTiles} patches x ${nFlips} mirrorings x ${folds.length} network(s)`);
 
   // 3. Folds.
   const Npad = padded.dims[0] * padded.dims[1] * padded.dims[2];
   const ens = new Float32Array(Npad);
   const perFoldSpan = 0.85 / folds.length;
   timing.folds = [];
+  let activeBackend = backend === 'wasm' ? 'wasm' : ((typeof navigator.gpu !== 'undefined' && await navigator.gpu.requestAdapter()) ? 'webgpu' : 'wasm');
+  postLog(`Backend: ${activeBackend === 'webgpu' ? 'WebGPU (WebAssembly fallback)' : 'WebAssembly'}`);
   for (let fi = 0; fi < folds.length; fi++) {
     const f = String(folds[fi]);
-    const entry = manifest.folds[f][precision];
     const base = 0.08 + fi * perFoldSpan;
-    const modelData = await fetchModel(modelBaseUrl, entry, `fold ${f}`, base, perFoldSpan * 0.3);
-    postProgress(base + perFoldSpan * 0.3, `Loading fold ${f}...`);
-    const t0 = performance.now();
-    const eps = backend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
-    const session = await ort.InferenceSession.create(modelData, { executionProviders: eps, graphOptimizationLevel: 'all' });
-    const t1 = performance.now();
-    const runNet = async (x) => {
-      const out = await session.run({ [manifest.input]: new ort.Tensor('float32', x, [1, 1, ...patch]) });
-      const t = out[manifest.output];
-      const d = t.location && t.location !== 'cpu' ? await t.getData() : t.data;
-      if (t.dispose) t.dispose();
-      return d;
-    };
-    const { logits, C } = await P.slidingWindowLogits(padded.data, padded.dims, patch, runNet, {
-      mirrorAxes, gaussian, step: manifest.tile_step_size,
-      onTile: (i, n) => postProgress(base + perFoldSpan * (0.3 + 0.7 * i / n), `Fold ${f}: patch ${i}/${n}`)
-    });
+    const onTile = (i, n) => postProgress(base + perFoldSpan * (0.3 + 0.7 * i / n), `Fold ${f}: patch ${i}/${n}`);
+    let result = null;
+    // WebGPU first (rewritten graph without 3D ConvTranspose), WASM if it is unavailable or fails.
+    for (const be of (activeBackend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'])) {
+      const prec = be === 'webgpu' ? 'webgpu16' : precision;
+      const entry = manifest.folds[f][prec];
+      if (!entry) continue;
+      const modelData = await fetchModel(modelBaseUrl, entry, `network ${Number(f) + 1}${be === 'webgpu' ? ' (WebGPU)' : ''}`, base, perFoldSpan * 0.3);
+      postProgress(base + perFoldSpan * 0.3, `Loading network ${Number(f) + 1}...`);
+      const t0 = performance.now();
+      let session = null;
+      try {
+        session = await ort.InferenceSession.create(modelData, { executionProviders: [be], graphOptimizationLevel: 'all' });
+        const t1 = performance.now();
+        const runNet = async (x) => {
+          const out = await session.run({ [manifest.input]: new ort.Tensor('float32', x, [1, 1, ...patch]) });
+          const t = out[manifest.output];
+          const d = t.location && t.location !== 'cpu' ? await t.getData() : t.data;
+          if (t.dispose) t.dispose();
+          return d;
+        };
+        const r = await P.slidingWindowLogits(padded.data, padded.dims, patch, runNet,
+          { mirrorAxes, gaussian, step: manifest.tile_step_size, onTile });
+        await session.release();
+        const t2 = performance.now();
+        result = r;
+        timing.folds.push({ fold: f, backend: be, sessionCreate: (t1 - t0) / 1000, inference: (t2 - t1) / 1000 });
+        postLog(`Network ${Number(f) + 1} (${be}): session ${((t1 - t0) / 1000).toFixed(1)} s, inference ${((t2 - t1) / 1000).toFixed(1)} s`);
+        break;
+      } catch (err) {
+        if (session) { try { await session.release(); } catch (e) { /* ignore */ } }
+        if (be !== 'webgpu') throw err;
+        postLog(`WebGPU failed (${err?.message || err}); using WebAssembly`);
+        activeBackend = 'wasm';
+      }
+    }
+    const { logits, C } = result;
     const p = P.softmaxClass(logits, C, Npad, cls);
     for (let i = 0; i < Npad; i++) ens[i] += p[i] / folds.length;
-    await session.release();
-    const t2 = performance.now();
-    timing.folds.push({ fold: f, sessionCreate: (t1 - t0) / 1000, inference: (t2 - t1) / 1000 });
-    postLog(`Fold ${f}: session ${((t1 - t0) / 1000).toFixed(1)} s, inference ${((t2 - t1) / 1000).toFixed(1)} s`);
   }
 
   // 4. Back to the input grid: unpad, (resample back), uncrop (outside the crop: probability 0).
@@ -249,7 +269,8 @@ async function runInference(config) {
   postStageData('probability', createOutputNifti(pm, headerBytes), `Marker probability (mean of ${folds.length} fold(s))`);
   postStageData('markers', createOutputNifti(det.markerMap, headerBytes), `Top ${nMarkers} markers (value = rank)`);
   const { markerMap, ...summary } = det; // eslint-disable-line no-unused-vars
-  self.postMessage({ type: 'detections', ...summary, folds, mirror, backend, precision, timing });
+  const usedBackends = [...new Set(timing.folds.map((t) => t.backend))];
+  self.postMessage({ type: 'detections', ...summary, folds, mirror, backend: usedBackends.join('+'), precision, timing });
   postLog(`Detected ${det.markers.length}/${nMarkers} markers (${det.nCandidates} candidates)` +
     (det.countFlag ? ': fewer than the implant count, review the image' : ''));
   postLog(`Total time ${timing.total.toFixed(1)} s`);

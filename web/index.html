@@ -91,16 +91,17 @@
           Inference Settings
         </h2>
         <div class="section-content">
-          <!-- Fold selection -->
+          <!-- Network selection -->
           <div class="param-group">
-            <label class="param-label">Model folds <span class="info-icon">i<span class="info-tooltip">The model is a 5-fold nnU-Net ensemble. Each selected fold is downloaded once (about 200 MB) and cached by the browser. More folds average more predictions and take proportionally longer.</span></span></label>
+            <label class="param-label">Networks <span class="info-icon">i<span class="info-tooltip">The model consists of 5 networks from 5-fold cross-validation. Select one network, or several to average their probability maps. The 5-network ensemble is the configuration that was evaluated on independent patients; a single network is faster. Each network is downloaded once (about 200 MB) and cached by the browser.</span></span></label>
             <div class="model-checkbox-group" id="foldCheckboxes">
-              <label class="checkbox-label"><input type="checkbox" id="fold0" checked> 1</label>
-              <label class="checkbox-label"><input type="checkbox" id="fold1"> 2</label>
-              <label class="checkbox-label"><input type="checkbox" id="fold2"> 3</label>
-              <label class="checkbox-label"><input type="checkbox" id="fold3"> 4</label>
-              <label class="checkbox-label"><input type="checkbox" id="fold4"> 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold0" checked> Network 1 of 5 (default)</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold1"> Network 2 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold2"> Network 3 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold3"> Network 4 of 5</label>
+              <label class="checkbox-label"><input type="checkbox" id="fold4"> Network 5 of 5</label>
             </div>
+            <button class="btn btn-secondary btn-sm" id="selectAllFolds" type="button">Use all 5 (evaluated ensemble)</button>
           </div>
 
           <!-- Mirroring -->

@@ -117,6 +117,10 @@ class SeedSegApp {
     // Unified file input
     this._setupUnifiedDropZone();
 
+    document.getElementById('selectAllFolds')?.addEventListener('click', () => {
+      Config.FOLDS.forEach((f) => { const cb = document.getElementById(`fold${f}`); if (cb) cb.checked = true; });
+    });
+
     // Run button
     const runBtn = document.getElementById('runSegmentation');
     if (runBtn) runBtn.addEventListener('click', () => this.runSegmentation());
@@ -769,7 +773,7 @@ class SeedSegApp {
       return;
     }
     const mirror = !!document.getElementById('mirrorTTA')?.checked;
-    const backend = document.getElementById('backendSelect')?.value || Config.INFERENCE_DEFAULTS.backend;
+    const backend = Config.INFERENCE_DEFAULTS.backend;
     const threshold = parseFloat(document.getElementById('probThreshold')?.value || String(Config.INFERENCE_DEFAULTS.threshold));
     const nMarkers = parseInt(document.getElementById('nMarkers')?.value || String(Config.INFERENCE_DEFAULTS.nMarkers));
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
@@ -797,7 +801,8 @@ class SeedSegApp {
         precision: Config.INFERENCE_DEFAULTS.precision,
         threshold,
         nMarkers,
-        modelBaseUrl
+        modelBaseUrl,
+        modelFileUrls: Config.MODEL_FILE_URLS
       }
     });
   }
@@ -951,7 +956,9 @@ class SeedSegApp {
         <td>${m.rank}</td><td>${m.meanProb.toFixed(3)}</td><td>${m.volumeMm3.toFixed(0)}</td><td>${w}</td></tr>`;
     }).join('');
     const next = det.others.length ? `Next candidate: mean probability ${det.others[0].meanProb.toFixed(3)}.` : '';
-    const t = det.timing?.total ? ` ${det.timing.total.toFixed(0)} s, ${det.folds.length} fold(s)${det.mirror ? ', mirroring' : ''}.` : '';
+    const nets = det.folds.length === 5 ? '5-network ensemble' : `network${det.folds.length > 1 ? 's' : ''} ${det.folds.map((f) => Number(f) + 1).join(', ')} of 5`;
+    const t = ` Configuration: ${nets}, mirroring ${det.mirror ? 'on' : 'off'}, K = ${det.k}, ${det.backend === 'webgpu' ? 'WebGPU' : det.backend === 'wasm' ? 'WebAssembly' : det.backend}` +
+      (det.timing?.total ? `, ${det.timing.total.toFixed(0)} s.` : '.');
     panel.innerHTML = `${flag}<table class="detections-table"><thead><tr><th>#</th><th>Mean p</th><th>mm³</th><th>Position (mm)</th></tr></thead>
       <tbody>${rows}</tbody></table><div class="detections-meta">${next}${t}</div>`;
     panel.classList.remove('hidden');

@@ -6,7 +6,8 @@ ort.min.js), with exactly equivalent operations:
 - 3D Conv with unequal pads (the 1x3x3 convs, pads 0,1,1) -> Conv with equal pads (1) and a
   Slice removing the extra output slices (the 3D Conv kernel only takes equal pads);
 - 3D AveragePool with kernel == stride and no padding (the residual-skip downsampling)
-  -> depthwise Conv with weights 1/prod(kernel) (3D pooling only runs in NCHW layout).
+  -> Reshape + ReduceMean (3D pooling does not run in the default NHWC layout, and grouped
+  3D Conv gives wrong results).
 Writes {fold}.wg.onnx (fp32) and {fold}.wg16.onnx (fp16-stored weights, fp32 compute) and
 records them as "webgpu" / "webgpu16" in seedseg-v2.json; "web" (the file the web app
 loads, on WebGPU and WebAssembly) is "webgpu16".
@@ -59,15 +60,18 @@ def rewrite(m):
                 continue
             nodes.append(nd); continue
         if nd.op_type == 'AveragePool':
+            # [N, C, D, H, W] -> [N, C, D/kz, kz, H/ky, ky, W/kx, kx] -> mean over the k axes.
+            # (A depthwise Conv would be shorter, but grouped 3D Conv is wrong on JSEP WebGPU.)
             at = {a.name: helper.get_attribute_value(a) for a in nd.attribute}
             k = list(at['kernel_shape'])
             assert k == list(at.get('strides', k)) and not any(at.get('pads', [0])) and not at.get('ceil_mode', 0), nd.name
-            c = shapes[nd.input[0]][1]
-            assert c, f'{nd.name}: unknown channel count'
+            C, D, H, Wd = shapes[nd.input[0]][1:]
+            assert C and D and H and Wd and D % k[0] == 0 and H % k[1] == 0 and Wd % k[2] == 0, nd.name
             p = nd.name.replace('/', '_')
-            g.initializer.append(numpy_helper.from_array(np.full((c, 1, *k), 1.0 / np.prod(k), np.float32), p + '_w'))
-            nodes.append(helper.make_node('Conv', [nd.input[0], p + '_w'], list(nd.output), name=p + '_conv',
-                                          kernel_shape=k, strides=k, group=c))
+            g.initializer.append(numpy_helper.from_array(
+                np.array([0, C, D // k[0], k[0], H // k[1], k[1], Wd // k[2], k[2]], np.int64), p + '_sh'))
+            nodes += [helper.make_node('Reshape', [nd.input[0], p + '_sh'], [p + '_r'], name=p + '_r'),
+                      helper.make_node('ReduceMean', [p + '_r'], list(nd.output), name=p + '_mean', axes=[3, 5, 7], keepdims=0)]
             n_rw += 1
             continue
         if nd.op_type != 'ConvTranspose':

@@ -5,7 +5,7 @@ preprint (bioRxiv 10.64898/2026.06.18.733061). The approach has four parts:
 fix the reference labels, retrain with nnU-Net, add physics-simulated markers,
 and evaluate with cross-validation over all 127 subjects.
 
-Last updated: 2026-10-19 (final_end check, job 29940934).
+Last updated: 2026-10-20 (rerun_end, run by hand; see "Results: 521 rerun and 250-epoch repeats").
 
 ## Decisions (2026-10-19, made by Claude at Ashley's request: "submit as soon as possible")
 
@@ -38,7 +38,7 @@ Ashley items below are resolved as follows:
 7. **z1438488 and the 2025 patients: excluded**, for lack of usable reference labels (stated in the methods).
 8. **Methods checks:** the resolvable ones are being resolved from code and records, with
    conservative wording elsewhere (no claims beyond the records).
-9. **Deployment (web app / OpenRecon) comes after submission.** For the paper, release the 513 model weights
+9. **Deployment (web app / OpenRecon) comes after submission.** For the paper, release the 511 model weights (513 before the 2026-10-20 final choice)
    and code with the manuscript.
 
 ## Needs Ashley
@@ -338,6 +338,14 @@ and should be given a per-arm `--cache`.
 
 ### Recommended final model and next steps (for Ashley)
 
+- **Final choice (rerun_end, 2026-10-20, Decision 2): 511 (corrected labels, no synthetic data), 5-fold
+  ensemble, plain top-3 by score + count flag.** No arm or post-processing beats it significantly on all
+  127 OOF (513 + C 6 vs 12, p=0.24; 250-ep 3-run average + C 8 vs 13, p=0.38) or on the fresh 9 (all
+  ensembles 27/27). Synthetic data, constellation selection and run averaging are reported as tested
+  without detectable benefit; test-25 point estimates favour them (73/74 vs 67/74, p=0.03–0.07, uncorrected).
+  250 epochs is equivalent to 1000 epochs, so a deployment model can be trained at 250 epochs.
+  *The 513 + constellation recommendation below is superseded by this; kept for the record.*
+
 - **Deploy 513 (corrected labels + synthetic markers) with constellation selection, K = implant count.**
   - It has the best point estimates on every set: all 127 360/377, 8 FP, 109/127 perfect; test 25
     73/74, 1 FP.
@@ -373,6 +381,57 @@ and should be given a per-arm `--cache`.
     before replacing the released ONNX models on OSF and in the web app.
   - OpenRecon: the same ONNX plus Python post-processing. Let the implant count come from the user or
     the protocol, with a default of 3.
+
+## Results: 521 rerun and 250-epoch repeats (rerun_end, 2026-10-20)
+
+The scheduled `rerun_end` check (job 30114430) started Claude and exited in the same second, so this
+was run by hand from an interactive session. All training was complete: 521 5/5 folds, r1–r3 15/15
+folds, every export with 127 OOF cases. The rerun 521 labels contain marker class 1 in 126/127 (z2877562
+has none, as expected). Fold assignment (`oof_folds.json`) is identical across 501, 511, 521 and r1–r3,
+so averaging the runs stays out-of-fold. Averaging: `scripts/evaluation/average_runs.py` →
+`nnunet/predictions_avg3/Dataset511_250ep/oof` (mean of the 3-class maps). Fresh-set inference:
+`predict_fresh.slurm` 30195291–30195294 (all OK).
+
+**All 127 OOF and test 25** (corrected references, 5 mm; C = constellation, pre-specified: inner-CV λ, K = implant count):
+
+| Arm | all127 sens (95% CP) | FP | Perfect | test25 | FP |
+|---|---|---|---|---|---|
+| 501 (original labels) | 351/377 | 16 | — | 71/74 | 3 |
+| **521 (original positions, 3-mm spheres)** | 355/377 = 94.2% | 10 | 105 | 71/74 | 2 |
+| 521 + C | 355/377 | 9 | 106 | 71/74 | 2 |
+| 511 (corrected, 1000 ep) | 354/377 = 93.9% (91.0–96.1) | 9 | 103 | 67/74 | 2 |
+| 511 + C | 356/377 | 7 | 105 | 68/74 | 1 |
+| 511 250 ep r1 / r2 / r3 | 353 / 352 / 355 | 9 / 13 / 11 | 104 / 102 / 103 | 70 / 70 / 71 | 1 / 2 / 2 |
+| **511 250 ep, 3-run average** | 357/377 = 94.7% | 12 | 106 | 71/74 | 2 |
+| 511 250 ep 3-run average + C | 359/377 = 95.2% | 9 | 109 | 73/74 | 0 |
+| 513 + C (previous best) | 360/377 = 95.5% (92.9–97.4) | 8 | 109 | 73/74 | 1 |
+
+Paired (exact McNemar on discordant markers; dSens 95% bootstrap), all 127:
+- 501 → 521 (label shape only): 9 vs 13, p=0.52, dSens [−3.4, +1.3] pp; FP 16 → 10.
+- 521 → 511 (position/CTV correction): 11 vs 10, p=1.00, dSens [−1.9, +2.4] pp; FP 10 vs 9.
+- 511 vs 511 r1 (1000 vs 250 epochs, one run each): 10 vs 9, p=1.00.
+- 511 vs 3-run average: 10 vs 13, p=0.68. 511 vs 3-run average + C: 8 vs 13, p=0.38.
+- 3-run average + C vs 513 + C: 9 vs 10, p=1.00.
+
+Test 25 (secondary): 511 vs 3-run average + C 1 vs 7, p=0.070; 511 vs 513 + C 0 vs 6, p=0.031 (not
+corrected for the many test-25 contrasts; on all 127 the same contrast is p=0.24). Tables:
+`eval/analysis/compare_501_521_511.txt`, `compare_250ep.txt`; results `eval/results/nnunet{521,511r3,511avg3}*`.
+
+**Fresh 9 patients (27 markers):** every ensemble is at the ceiling, 27/27, 0 FP, 9/9 perfect: 521,
+each of r1/r2/r3, the 15-model 3-run average, all ± constellation (and 511 as before). Single fold models:
+r1 27/26/27/26/25, r2 27/27/27/27/26, r3 27/27/27/25/27 (constellation +1 on r3 fold 3), 521
+26/27/26/26/26. The fresh set no longer separates the v2 arms.
+
+**Reading.**
+- The shape-vs-position decomposition is null: 501 → 521 → 511 changes sensitivity by < 1 pp each, none
+  significant. The fix's clearest effect, fewer FP (16 → 9–10), already appears with spheres at the
+  original positions, i.e. it comes from the label *shape* (consistent 3-mm spheres) rather than the
+  position correction.
+- 250 epochs is as good as 1000 (single runs 352–355 vs 354), at a quarter of the training cost.
+  Averaging three 250-epoch runs (+3 TP) and constellation (+2 TP, −3 FP) move in the right direction
+  but neither is significant; the 3-run average + C ties 513 + C (359 vs 360, 9 vs 8 FP).
+- Nothing beats 511 significantly on all 127 or on the fresh set. Under Decision 2 the final model
+  stays the simplest arm.
 
 ## Fresh external test: 9 automatically labelled patients (2026-10-19)
 

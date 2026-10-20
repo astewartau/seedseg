@@ -1,7 +1,7 @@
 # Methods (SeedSeg v2, draft)
 
 Draft methods for the revision of the preprint (bioRxiv 10.64898/2026.06.18.733061).
-Items marked **[pending]** were still running on 2026-10-19.
+All arms had completed by 2026-10-20.
 
 ## Data and cohort
 
@@ -216,8 +216,9 @@ and 513), and K was the number of reference markers. The external set was analys
 after the study-set analyses of 501, 511, 512 and 513 were complete. It was then used,
 together with the study-set results, to choose the deployed configuration. Because
 the external set informed that choice, its results for the chosen configuration are
-not a fully blind estimate. [pending: the 250-epoch and 521 models are applied to it
-when their training finishes.]
+not a fully blind estimate. The 521 and 250-epoch models (each run, and the
+mean of all 15 fold maps of r1–r3) were applied to it in the same way after their
+training finished.
 
 ## Label variants
 
@@ -371,8 +372,8 @@ For the repeat-run analysis, 511 was additionally trained three times with
 decays over 250 epochs), in separate results directories (r1–r3), on the same
 dataset and folds. nnU-Net 2.8.1 sets no random seed (and runs cuDNN in
 non-deterministic mode), and none was set by us, so the repeats differ in
-initialisation, data sampling and augmentation. **[pending:
-running as of 2026-10-19.]**
+initialisation, data sampling and augmentation. A 250-epoch fold took about 2 h 05 min (2 h 04 min to
+2 h 10 min).
 
 Each fold was trained on one NVIDIA H100 GPU (12 CPU cores, 96 GB RAM, 10 data
 augmentation workers) on the UQ Bunya cluster. A 1000-epoch fold took about
@@ -399,12 +400,11 @@ In 513, each training fold contained 101–102 real and 202–204 synthetic case
 synthetic cases were never in a validation fold, so no patient contributed to
 both the training and the evaluation of a fold model.
 
-**521 [pending].** The first 521 run was discarded: a label-generation bug left
+**521.** The first 521 run was discarded: a label-generation bug left
 its labels without any marker voxels. The labels were regenerated with the
-corrected script (126 of 127 patients have marker voxels) and the arm was
-retrained with the same design; this run was in progress as of 2026-10-19.
-
-**250-epoch repeats [pending]**, as above.
+corrected script (126 of 127 patients have marker voxels; the remaining patient
+has no marker label in any variant) and the arm was retrained with the same
+design and folds.
 
 ## Inference and post-processing
 

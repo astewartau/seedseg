@@ -109,6 +109,12 @@
             <label class="checkbox-label"><input type="checkbox" id="mirrorTTA"> Test-time mirroring <span class="info-icon">i<span class="info-tooltip">Also predicts the 7 mirrored copies of each patch and averages them, as nnU-Net does by default. About 8 times slower.</span></span></label>
           </div>
 
+          <!-- Advanced -->
+          <details class="param-group advanced-settings">
+            <summary class="param-label">Advanced</summary>
+            <label class="checkbox-label"><input type="checkbox" id="legacyModel"> Legacy model (v1, 4-network U-Net) <span class="info-icon">i<span class="info-tooltip">The previously released model: a consensus of four 3D U-Nets. Kept for comparison; the network and mirroring settings above do not apply to it.</span></span></label>
+          </details>
+
           <!-- Threshold -->
           <div class="param-group">
             <label class="param-label" for="probThreshold">Probability Threshold <span class="info-icon">i<span class="info-tooltip">Minimum probability for a voxel to be considered a marker. Lower values detect more but may include false positives.</span></span></label>

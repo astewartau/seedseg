@@ -63,16 +63,33 @@ jobs:
       - name: Download ONNX Runtime WASM
         run: bash web/setup.sh
 
-      # The five model folds (about 1 GB as fp16-stored weights) exceed what GitHub Pages
-      # should serve, so they are fetched by the browser from an external host with CORS
-      # (seedseg-v2.json and seedseg-v2_fold{0..4}.w16.onnx under one base URL).
-      - name: Point the app at the model host
-        env:
-          MODEL_BASE_URL: ${{ vars.SEEDSEG_MODEL_BASE_URL }}
+      # Models are stored on OSF (project f7hjv) and bundled into the site, so the browser
+      # loads them same-origin. Each file is checked against its SHA-256.
+      #   v2: seedseg-v2.json and the 5 nnU-Net networks (*.wg16.onnx: fp16-stored weights,
+      #       fp32 compute; runs on WebGPU and WebAssembly), OSF folder seedseg-v2/
+      #   legacy: the v1 4-network U-Net (Advanced settings only)
+      - name: Download models from OSF
         run: |
-          test -n "$MODEL_BASE_URL" || { echo "Set the repository variable SEEDSEG_MODEL_BASE_URL"; exit 1; }
-          sed -i "s|^export const MODEL_BASE_URL = .*|export const MODEL_BASE_URL = '$MODEL_BASE_URL';|" web/js/app/config.js
-          grep "MODEL_BASE_URL =" web/js/app/config.js
+          OSF="https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage"
+          while read -r path id sha; do
+            [ -n "$path" ] || continue
+            case "$id" in *TODO*) echo "::error::No OSF file id for $path"; exit 1;; esac
+            mkdir -p "web/models/$(dirname "$path")"
+            curl -fL --retry 3 -o "web/models/$path" "$OSF/$id"
+            echo "$sha  web/models/$path" | sha256sum -c -
+          done <<'EOF'
+          seedseg-v2.json            TODO-OSF-ID  SHA_JSON
+          seedseg-v2_fold0.wg16.onnx TODO-OSF-ID  SHA_F0
+          seedseg-v2_fold1.wg16.onnx TODO-OSF-ID  SHA_F1
+          seedseg-v2_fold2.wg16.onnx TODO-OSF-ID  SHA_F2
+          seedseg-v2_fold3.wg16.onnx TODO-OSF-ID  SHA_F3
+          seedseg-v2_fold4.wg16.onnx TODO-OSF-ID  SHA_F4
+          legacy/seedseg-model-seed42.onnx  69a7b3b11bb961e0a3e7d1d3 7dc1ef1875b7027c56950cc3c35f1ffa8d67f7190a49df49811105cd639b784d
+          legacy/seedseg-model-seed123.onnx 69a7b3b0a32ec43a2279789d bfe4fe9140383e87a6c0c4cb2a6e9a84c3435f1413fd3644273bd9f1a0c3bdee
+          legacy/seedseg-model-seed456.onnx 69a7b3b13233e4a733e7d719 2aa00094e01e978f3d85a882a97f9a1ef59da32341db4aaaf46c0c5388424ae7
+          legacy/seedseg-model-seed789.onnx 69a7b3b1a32ec43a2279789f e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5
+          EOF
+          ls -lhR web/models/
 
       - name: Prepare deployment
         run: |
@@ -85,6 +102,8 @@ jobs:
           cp -r web/wasm deploy/
           cp -r web/dcm2niix deploy/
           cp -r web/nifti-js deploy/
+          cp -r web/models deploy/
+          du -sh deploy
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

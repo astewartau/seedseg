@@ -10,11 +10,12 @@ ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist"
 
 echo "Downloading ONNX Runtime Web v${ORT_VERSION}..."
 
-# WebGPU build: provides both the 'webgpu' and 'wasm' execution providers
+# JSEP build: the 'webgpu' (with 3D Conv) and 'wasm' execution providers. The newer
+# ort.webgpu.min.js build has no 3D Conv on WebGPU.
 ORT_FILES=(
-  ort.webgpu.min.js
-  ort-wasm-simd-threaded.asyncify.mjs
-  ort-wasm-simd-threaded.asyncify.wasm
+  ort.min.js
+  ort-wasm-simd-threaded.jsep.mjs
+  ort-wasm-simd-threaded.jsep.wasm
 )
 
 for f in "${ORT_FILES[@]}"; do

@@ -14,6 +14,7 @@ export class InferenceExecutor {
     this.onError = options.onError || (() => {});
     this.onInitialized = options.onInitialized || (() => {});
     this.onDetections = options.onDetections || (() => {});
+    this.workerPath = options.workerPath || 'js/inference-worker.js';
 
     this.worker = null;
     this.workerReady = false;
@@ -38,7 +39,7 @@ export class InferenceExecutor {
   _setupWorker() {
     if (this.worker) return;
 
-    this.worker = new Worker('js/inference-worker.js');
+    this.worker = new Worker(this.workerPath);
 
     this.worker.onmessage = (e) => {
       const { type, ...data } = e.data;
@@ -56,7 +57,7 @@ export class InferenceExecutor {
         case 'initialized':
           this.workerReady = true;
           this.workerInitializing = false;
-          this.updateOutput(`ONNX Runtime ready (${data.threads} thread(s)${data.webgpu ? ', WebGPU available' : ''})`);
+          this.updateOutput(data.threads ? `ONNX Runtime ready (${data.threads} thread(s)${data.webgpu ? ', WebGPU available' : ''})` : 'ONNX Runtime ready');
           this.onInitialized(data);
           break;
         case 'complete':

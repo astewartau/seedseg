@@ -1,26 +1,25 @@
 export const VERSION = '0.2.6';
 
-// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py).
-// MODEL_BASE_URL holds seedseg-v2.json (patch size, spacing, file names, sizes, SHA-256)
-// and the fold files; each fold is downloaded when first used and cached in IndexedDB.
-// Model files: one place to fill in. MODEL_FILE_URLS maps a file name from seedseg-v2.json
-// (and 'seedseg-v2.json' itself) to a full download URL (e.g. an OSF file URL); files not
-// listed are fetched from MODEL_BASE_URL/<file name>.
+// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py), served
+// same-origin from ./models (the deploy workflow downloads them from OSF). seedseg-v2.json
+// holds the patch size, spacing, file names, sizes and SHA-256 digests; each network is
+// downloaded when first used and cached in IndexedDB.
 export const MODEL_BASE_URL = './models';
-export const MODEL_FILE_URLS = {
-  // 'seedseg-v2.json': 'https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage/<id>',
-  // 'seedseg-v2_fold0.wg16.onnx': '...', 'seedseg-v2_fold0.w16.onnx': '...', ...
-};
 
 export const FOLDS = ['0', '1', '2', '3', '4'];
+
+// Legacy v1 model (the previously released 4-network 3D U-Net consensus), Advanced settings only.
+export const LEGACY_MODEL_BASE_URL = './models/legacy';
+export const LEGACY_MODELS = ['seedseg-model-seed42.onnx', 'seedseg-model-seed123.onnx',
+  'seedseg-model-seed456.onnx', 'seedseg-model-seed789.onnx'];
 
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
   nMarkers: 3,
   folds: ['0'],
   mirror: false,
-  precision: 'w16',   // fp16-stored weights, fp32 compute (half the download of fp32)
-  backend: 'auto'     // WebGPU (rewritten graph, *.wg16.onnx) when available, else WebAssembly
+  model: 'web',      // seedseg-v2.json entry: *.wg16.onnx, fp16-stored weights, fp32 compute (WebGPU and WebAssembly)
+  backend: 'auto'    // WebGPU when available, else WebAssembly
 };
 
 export const VIEWER_CONFIG = {

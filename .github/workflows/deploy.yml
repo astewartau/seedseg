@@ -63,17 +63,16 @@ jobs:
       - name: Download ONNX Runtime WASM
         run: bash web/setup.sh
 
-      - name: Download ONNX models from OSF
+      # The five model folds (about 1 GB as fp16-stored weights) exceed what GitHub Pages
+      # should serve, so they are fetched by the browser from an external host with CORS
+      # (seedseg-v2.json and seedseg-v2_fold{0..4}.w16.onnx under one base URL).
+      - name: Point the app at the model host
+        env:
+          MODEL_BASE_URL: ${{ vars.SEEDSEG_MODEL_BASE_URL }}
         run: |
-          mkdir -p web/models
-          OSF_BASE="https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage"
-          echo "Downloading ONNX models from OSF..."
-          curl -L -o web/models/seedseg-model-seed42.onnx   "$OSF_BASE/69a7b3b11bb961e0a3e7d1d3"
-          curl -L -o web/models/seedseg-model-seed123.onnx  "$OSF_BASE/69a7b3b0a32ec43a2279789d"
-          curl -L -o web/models/seedseg-model-seed456.onnx  "$OSF_BASE/69a7b3b13233e4a733e7d719"
-          curl -L -o web/models/seedseg-model-seed789.onnx  "$OSF_BASE/69a7b3b1a32ec43a2279789f"
-          echo "Models downloaded:"
-          ls -lh web/models/
+          test -n "$MODEL_BASE_URL" || { echo "Set the repository variable SEEDSEG_MODEL_BASE_URL"; exit 1; }
+          sed -i "s|^export const MODEL_BASE_URL = .*|export const MODEL_BASE_URL = '$MODEL_BASE_URL';|" web/js/app/config.js
+          grep "MODEL_BASE_URL =" web/js/app/config.js
 
       - name: Prepare deployment
         run: |
@@ -86,7 +85,6 @@ jobs:
           cp -r web/wasm deploy/
           cp -r web/dcm2niix deploy/
           cp -r web/nifti-js deploy/
-          cp -r web/models deploy/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

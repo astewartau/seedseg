@@ -13,6 +13,7 @@ export class InferenceExecutor {
     this.onComplete = options.onComplete || (() => {});
     this.onError = options.onError || (() => {});
     this.onInitialized = options.onInitialized || (() => {});
+    this.onDetections = options.onDetections || (() => {});
 
     this.worker = null;
     this.workerReady = false;
@@ -55,14 +56,18 @@ export class InferenceExecutor {
         case 'initialized':
           this.workerReady = true;
           this.workerInitializing = false;
-          this.updateOutput('ONNX Runtime ready');
-          this.onInitialized();
+          this.updateOutput(`ONNX Runtime ready (${data.threads} thread(s)${data.webgpu ? ', WebGPU available' : ''})`);
+          this.onInitialized(data);
           break;
         case 'complete':
           this._handleComplete();
           break;
         case 'stageData':
           this._handleStageData(data);
+          break;
+        case 'detections':
+          this.detections = data;
+          this.onDetections(data);
           break;
       }
     };

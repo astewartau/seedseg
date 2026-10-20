@@ -1,647 +1,286 @@
 /**
  * SeedSeg Inference Worker
  *
- * Runs ONNX model inference and consensus segmentation in a Web Worker.
- * Pipeline: NIfTI parse → preprocess → run N models → consensus → output
+ * nnU-Net v2 (ResEnc) fold ensemble with ONNX Runtime Web, following
+ * scripts/deploy/seedseg_onnx.py (checked against nnUNetv2_predict):
+ * NIfTI parse -> bias field correction -> crop to nonzero -> z-score -> [resample]
+ * -> Gaussian sliding window (optional test-time mirroring) per fold -> softmax
+ * -> mean over folds -> candidates (components of p > threshold, ranked by mean
+ * probability) -> top K markers + count flag.
  */
 
-/* global importScripts, ort, localforage, nifti */
+/* global importScripts, ort, localforage, SeedSegPipeline, nifti */
 
-// Load dependencies (paths relative to worker location: js/)
-importScripts('../wasm/ort.min.js');
+importScripts('../wasm/ort.webgpu.min.js');
 importScripts('https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js');
 importScripts('../nifti-js/index.js');
+importScripts('modules/inference/nnunet-pipeline.js');
 
-// QSM WASM module (for bias field correction)
+const P = SeedSegPipeline;
 let qsmWasm = null;
 
-// ==================== Message Helpers ====================
+// ==================== Message helpers ====================
 
-function postProgress(value, text) {
-  self.postMessage({ type: 'progress', value, text });
-}
+const postProgress = (value, text) => self.postMessage({ type: 'progress', value, text });
+const postLog = (message) => self.postMessage({ type: 'log', message });
+const postError = (message) => self.postMessage({ type: 'error', message });
+const postStageData = (stage, niftiData, description) =>
+  self.postMessage({ type: 'stageData', stage, niftiData, description }, [niftiData]);
 
-function postLog(message) {
-  self.postMessage({ type: 'log', message });
-}
-
-function postError(message) {
-  self.postMessage({ type: 'error', message });
-}
-
-function postComplete() {
-  self.postMessage({ type: 'complete' });
-}
-
-function postStageData(stage, niftiData, description) {
-  self.postMessage(
-    { type: 'stageData', stage, niftiData, description },
-    [niftiData]
-  );
-}
-
-// ==================== NIfTI Utilities ====================
+// ==================== NIfTI ====================
 
 function decompressIfNeeded(data) {
   const bytes = new Uint8Array(data);
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-    // gzipped - use pako if available, otherwise use nifti library
-    if (typeof nifti !== 'undefined' && nifti.isCompressed) {
-      if (nifti.isCompressed(bytes.buffer)) {
-        return new Uint8Array(nifti.decompress(bytes.buffer));
-      }
+    if (typeof nifti !== 'undefined' && nifti.isCompressed && nifti.isCompressed(bytes.buffer)) {
+      return new Uint8Array(nifti.decompress(bytes.buffer));
     }
     throw new Error('Gzipped NIfTI detected but decompression not available');
   }
   return bytes;
 }
 
+/** Voxel -> world (mm) affine rows from the header: sform if set, else qform, else pixdim. */
+function headerAffine(view, pix) {
+  const qcode = view.getInt16(252, true), scode = view.getInt16(254, true);
+  if (scode > 0) {
+    const r = (o) => [0, 1, 2, 3].map((i) => view.getFloat32(o + 4 * i, true));
+    return [r(280), r(296), r(312)];
+  }
+  if (qcode > 0) {
+    const b = view.getFloat32(256, true), c = view.getFloat32(260, true), d = view.getFloat32(264, true);
+    const a = Math.sqrt(Math.max(0, 1 - b * b - c * c - d * d));
+    const q = [view.getFloat32(268, true), view.getFloat32(272, true), view.getFloat32(276, true)];
+    const qfac = pix[0] < 0 ? -1 : 1;
+    const R = [[a * a + b * b - c * c - d * d, 2 * (b * c - a * d), 2 * (b * d + a * c)],
+      [2 * (b * c + a * d), a * a + c * c - b * b - d * d, 2 * (c * d - a * b)],
+      [2 * (b * d - a * c), 2 * (c * d + a * b), a * a + d * d - c * c - b * b]];
+    const s = [pix[1], pix[2], pix[3] * qfac];
+    return [0, 1, 2].map((i) => [R[i][0] * s[0], R[i][1] * s[1], R[i][2] * s[2], q[i]]);
+  }
+  return [[pix[1], 0, 0, 0], [0, pix[2], 0, 0], [0, 0, pix[3], 0]];
+}
+
 function parseNiftiInput(arrayBuffer) {
   const data = decompressIfNeeded(arrayBuffer);
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-
-  // Parse dimensions
   const dims = [];
-  for (let i = 0; i < 8; i++) {
-    dims.push(view.getInt16(40 + i * 2, true));
-  }
-  const nx = dims[1], ny = dims[2], nz = dims[3];
-
-  // Parse voxel sizes
-  const pixDims = [];
-  for (let i = 0; i < 8; i++) {
-    pixDims.push(view.getFloat32(76 + i * 4, true));
-  }
-
-  // Parse data format
+  for (let i = 0; i < 8; i++) dims.push(view.getInt16(40 + i * 2, true));
+  const [nx, ny, nz] = [dims[1], dims[2], dims[3]];
+  const pix = [];
+  for (let i = 0; i < 8; i++) pix.push(view.getFloat32(76 + i * 4, true));
   const datatype = view.getInt16(70, true);
-  const voxOffset = view.getFloat32(108, true);
-  const sclSlope = view.getFloat32(112, true) || 1;
-  const sclInter = view.getFloat32(116, true) || 0;
-  const dataStart = Math.ceil(voxOffset);
-  const nTotal = nx * ny * nz;
-
-  // Read image data as Float32
-  const imageData = new Float32Array(nTotal);
-  switch (datatype) {
-    case 2: // UINT8
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = data[dataStart + i] * sclSlope + sclInter;
-      break;
-    case 4: // INT16
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = view.getInt16(dataStart + i * 2, true) * sclSlope + sclInter;
-      break;
-    case 8: // INT32
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = view.getInt32(dataStart + i * 4, true) * sclSlope + sclInter;
-      break;
-    case 16: // FLOAT32
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = view.getFloat32(dataStart + i * 4, true) * sclSlope + sclInter;
-      break;
-    case 64: // FLOAT64
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = view.getFloat64(dataStart + i * 8, true) * sclSlope + sclInter;
-      break;
-    case 512: // UINT16
-      for (let i = 0; i < nTotal; i++)
-        imageData[i] = view.getUint16(dataStart + i * 2, true) * sclSlope + sclInter;
-      break;
-    default:
-      throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
-  }
-
-  // Extract header for reuse in outputs
-  const headerSize = dataStart;
-  const headerBytes = new ArrayBuffer(headerSize);
-  new Uint8Array(headerBytes).set(data.slice(0, headerSize));
-
-  return {
-    imageData,
-    dims: [nx, ny, nz],
-    voxelSize: [pixDims[1] || 1, pixDims[2] || 1, pixDims[3] || 1],
-    headerBytes
-  };
+  const dataStart = Math.ceil(view.getFloat32(108, true));
+  const slope = view.getFloat32(112, true) || 1, inter = view.getFloat32(116, true) || 0;
+  const n = nx * ny * nz; // first volume only
+  const img = new Float32Array(n);
+  const rd = {
+    2: (i) => data[dataStart + i], 4: (i) => view.getInt16(dataStart + i * 2, true),
+    8: (i) => view.getInt32(dataStart + i * 4, true), 16: (i) => view.getFloat32(dataStart + i * 4, true),
+    64: (i) => view.getFloat64(dataStart + i * 8, true), 512: (i) => view.getUint16(dataStart + i * 2, true)
+  }[datatype];
+  if (!rd) throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
+  for (let i = 0; i < n; i++) img[i] = rd(i) * slope + inter;
+  const headerBytes = new ArrayBuffer(dataStart);
+  new Uint8Array(headerBytes).set(data.slice(0, dataStart));
+  return { imageData: img, dims: [nx, ny, nz], voxelSize: [pix[1] || 1, pix[2] || 1, pix[3] || 1],
+    affine: headerAffine(view, pix), headerBytes };
 }
 
 function createOutputNifti(float32Data, sourceHeader) {
-  const srcView = new DataView(sourceHeader);
-  const voxOffset = srcView.getFloat32(108, true);
-  const headerSize = Math.ceil(voxOffset);
-
-  const dataSize = float32Data.length * 4;
-  const buffer = new ArrayBuffer(headerSize + dataSize);
-  const destBytes = new Uint8Array(buffer);
-  const destView = new DataView(buffer);
-
-  // Copy header
-  destBytes.set(new Uint8Array(sourceHeader).slice(0, headerSize));
-
-  // Set datatype to FLOAT32
-  destView.setInt16(70, 16, true);
-  destView.setInt16(72, 32, true);
-
-  // Make it 3D
-  destView.setInt16(40, 3, true);
-  destView.setInt16(48, 1, true);
-
-  // Reset scaling
-  destView.setFloat32(112, 1, true);
-  destView.setFloat32(116, 0, true);
-
-  // Copy data
+  const headerSize = Math.ceil(new DataView(sourceHeader).getFloat32(108, true));
+  const buffer = new ArrayBuffer(headerSize + float32Data.length * 4);
+  const v = new DataView(buffer);
+  new Uint8Array(buffer).set(new Uint8Array(sourceHeader).slice(0, headerSize));
+  v.setInt16(70, 16, true); v.setInt16(72, 32, true); // float32
+  v.setInt16(40, 3, true); v.setInt16(48, 1, true);   // 3D
+  v.setFloat32(112, 1, true); v.setFloat32(116, 0, true);
   new Float32Array(buffer, headerSize).set(float32Data);
-
   return buffer;
 }
 
-// ==================== Preprocessing ====================
+// ==================== Models ====================
 
-function findPaddedDims(dims, factor) {
-  return dims.map(d => Math.ceil(d / factor) * factor);
+async function sha256Hex(buf) {
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function padVolume(data, srcDims, tgtDims) {
-  const [sx, sy, sz] = srcDims;
-  const [tx, ty, tz] = tgtDims;
-  const result = new Float32Array(tx * ty * tz);
-
-  const ox = Math.floor((tx - sx) / 2);
-  const oy = Math.floor((ty - sy) / 2);
-  const oz = Math.floor((tz - sz) / 2);
-
-  for (let z = 0; z < sz; z++) {
-    for (let y = 0; y < sy; y++) {
-      const srcOffset = z * sy * sx + y * sx;
-      const tgtOffset = (z + oz) * ty * tx + (y + oy) * tx + ox;
-      result.set(data.subarray(srcOffset, srcOffset + sx), tgtOffset);
-    }
-  }
-  return result;
-}
-
-function cropVolume(data, paddedDims, origDims) {
-  const [px, py, pz] = paddedDims;
-  const [ox, oy, oz] = origDims;
-  const result = new Float32Array(ox * oy * oz);
-
-  const offX = Math.floor((px - ox) / 2);
-  const offY = Math.floor((py - oy) / 2);
-  const offZ = Math.floor((pz - oz) / 2);
-
-  for (let z = 0; z < oz; z++) {
-    for (let y = 0; y < oy; y++) {
-      const srcOffset = (z + offZ) * py * px + (y + offY) * px + offX;
-      const tgtOffset = z * oy * ox + y * ox;
-      result.set(data.subarray(srcOffset, srcOffset + ox), tgtOffset);
-    }
-  }
-  return result;
-}
-
-function zScoreNormalize(data) {
-  const n = data.length;
-  let sum = 0;
-  for (let i = 0; i < n; i++) sum += data[i];
-  const mean = sum / n;
-
-  let sumSq = 0;
-  for (let i = 0; i < n; i++) {
-    const d = data[i] - mean;
-    sumSq += d * d;
-  }
-  const std = Math.sqrt(sumSq / n) || 1;
-
-  const result = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    result[i] = (data[i] - mean) / std;
-  }
-  return result;
-}
-
-// ==================== Axis Transposition ====================
-// NIfTI stores data in Fortran order (x varies fastest): index = x + y*nx + z*nx*ny
-// ONNX Runtime expects C-contiguous (last dim varies fastest): index = x*ny*nz + y*nz + z
-// These functions convert between the two layouts for shape [nx, ny, nz].
-
-function niftiToC(data, nx, ny, nz) {
-  const result = new Float32Array(nx * ny * nz);
-  for (let x = 0; x < nx; x++) {
-    for (let y = 0; y < ny; y++) {
-      for (let z = 0; z < nz; z++) {
-        result[x * ny * nz + y * nz + z] = data[x + y * nx + z * nx * ny];
-      }
-    }
-  }
-  return result;
-}
-
-function cToNifti(data, nx, ny, nz) {
-  const result = new Float32Array(nx * ny * nz);
-  for (let x = 0; x < nx; x++) {
-    for (let y = 0; y < ny; y++) {
-      for (let z = 0; z < nz; z++) {
-        result[x + y * nx + z * nx * ny] = data[x * ny * nz + y * nz + z];
-      }
-    }
-  }
-  return result;
-}
-
-// ==================== Post-processing ====================
-
-function softmaxExtractClass1(rawOutput, voxelCount, numClasses) {
-  const result = new Float32Array(voxelCount);
-
-  for (let v = 0; v < voxelCount; v++) {
-    let maxLogit = -Infinity;
-    for (let c = 0; c < numClasses; c++) {
-      const logit = rawOutput[c * voxelCount + v];
-      if (logit > maxLogit) maxLogit = logit;
-    }
-
-    let sumExp = 0;
-    for (let c = 0; c < numClasses; c++) {
-      sumExp += Math.exp(rawOutput[c * voxelCount + v] - maxLogit);
-    }
-
-    result[v] = Math.exp(rawOutput[1 * voxelCount + v] - maxLogit) / sumExp;
-  }
-
-  return result;
-}
-
-function connectedComponents3D(binaryMask, dims) {
-  const [nx, ny, nz] = dims;
-  const n = nx * ny * nz;
-  const labels = new Int32Array(n);
-  let nextLabel = 1;
-
-  const parent = [0];
-  const rank = [0];
-
-  function find(x) {
-    while (parent[x] !== x) {
-      parent[x] = parent[parent[x]];
-      x = parent[x];
-    }
-    return x;
-  }
-
-  function union(a, b) {
-    a = find(a); b = find(b);
-    if (a === b) return;
-    if (rank[a] < rank[b]) { const t = a; a = b; b = t; }
-    parent[b] = a;
-    if (rank[a] === rank[b]) rank[a]++;
-  }
-
-  // 13 backward neighbors for 26-connectivity
-  const neighborOffsets = [];
-  for (let dz = -1; dz <= 0; dz++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dz === 0 && dy === 0 && dx >= 0) continue;
-        neighborOffsets.push([dx, dy, dz]);
-      }
-    }
-  }
-
-  for (let z = 0; z < nz; z++) {
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        const idx = z * ny * nx + y * nx + x;
-        if (!binaryMask[idx]) continue;
-
-        const neighborLabels = [];
-        for (let i = 0; i < neighborOffsets.length; i++) {
-          const nx2 = x + neighborOffsets[i][0];
-          const ny2 = y + neighborOffsets[i][1];
-          const nz2 = z + neighborOffsets[i][2];
-          if (nx2 < 0 || nx2 >= nx || ny2 < 0 || ny2 >= ny || nz2 < 0 || nz2 >= nz) continue;
-          const nIdx = nz2 * ny * nx + ny2 * nx + nx2;
-          if (labels[nIdx] > 0) neighborLabels.push(labels[nIdx]);
-        }
-
-        if (neighborLabels.length === 0) {
-          labels[idx] = nextLabel;
-          parent.push(nextLabel);
-          rank.push(0);
-          nextLabel++;
-        } else {
-          let minLabel = find(neighborLabels[0]);
-          for (let i = 1; i < neighborLabels.length; i++) {
-            const c = find(neighborLabels[i]);
-            if (c < minLabel) minLabel = c;
-          }
-          labels[idx] = minLabel;
-          for (let i = 0; i < neighborLabels.length; i++) {
-            union(minLabel, neighborLabels[i]);
-          }
-        }
-      }
-    }
-  }
-
-  const canonicalMap = new Map();
-  let finalLabel = 0;
-  for (let i = 0; i < n; i++) {
-    if (labels[i] === 0) continue;
-    const root = find(labels[i]);
-    if (!canonicalMap.has(root)) canonicalMap.set(root, ++finalLabel);
-    labels[i] = canonicalMap.get(root);
-  }
-
-  return { labels, numComponents: finalLabel };
-}
-
-function selectTopNMarkers(probabilityMap, dims, nMarkers, threshold) {
-  const n = probabilityMap.length;
-
-  const binaryMask = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    binaryMask[i] = probabilityMap[i] > threshold ? 1 : 0;
-  }
-
-  const { labels, numComponents } = connectedComponents3D(binaryMask, dims);
-
-  if (numComponents === 0) return new Float32Array(n);
-
-  if (numComponents <= nMarkers) {
-    const result = new Float32Array(n);
-    for (let i = 0; i < n; i++) result[i] = labels[i] > 0 ? 1.0 : 0.0;
-    return result;
-  }
-
-  const componentSum = new Float64Array(numComponents + 1);
-  const componentCount = new Int32Array(numComponents + 1);
-
-  for (let i = 0; i < n; i++) {
-    if (labels[i] > 0) {
-      componentSum[labels[i]] += probabilityMap[i];
-      componentCount[labels[i]]++;
-    }
-  }
-
-  const scores = [];
-  for (let c = 1; c <= numComponents; c++) {
-    scores.push({ label: c, meanProb: componentSum[c] / componentCount[c] });
-  }
-  scores.sort((a, b) => b.meanProb - a.meanProb);
-
-  const keepLabels = new Set();
-  for (let i = 0; i < Math.min(nMarkers, scores.length); i++) {
-    keepLabels.add(scores[i].label);
-  }
-
-  const result = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    result[i] = keepLabels.has(labels[i]) ? 1.0 : 0.0;
-  }
-  return result;
-}
-
-function averageProbabilityMaps(maps) {
-  const n = maps[0].length;
-  const result = new Float32Array(n);
-  for (let m = 0; m < maps.length; m++) {
-    const map = maps[m];
-    for (let i = 0; i < n; i++) result[i] += map[i];
-  }
-  const count = maps.length;
-  for (let i = 0; i < n; i++) result[i] /= count;
-  return result;
-}
-
-// ==================== Model Loading ====================
-
-async function fetchModel(url, modelName, progressBase, progressSpan) {
-  const displayName = modelName || url.split('/').pop();
-
-  // Check cache first
+/** Fetch a model file, caching it in IndexedDB under its SHA-256 (so updates invalidate). */
+async function fetchModel(baseUrl, entry, label, progressBase, progressSpan) {
+  const key = `seedseg-v2:${entry.sha256}`;
   try {
-    const cached = await localforage.getItem(url);
-    if (cached && cached.byteLength > 1000000) {
-      postLog(`Model loaded from cache: ${displayName}`);
-      postProgress(progressBase + progressSpan, `Cached: ${displayName}`);
+    const cached = await localforage.getItem(key);
+    if (cached && cached.byteLength === entry.bytes) {
+      postLog(`Model loaded from cache: ${label}`);
       return cached;
     }
-  } catch (e) {
-    // Cache miss, continue to fetch
-  }
-
-  // Stream download with progress
-  postLog(`Downloading: ${displayName}...`);
+  } catch (e) { /* cache miss */ }
+  const url = `${baseUrl}/${entry.file}`;
+  postLog(`Downloading ${label} (${(entry.bytes / 1048576).toFixed(0)} MB)...`);
   const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
-  }
-
-  const contentLength = parseInt(response.headers.get('content-length'), 10);
+  if (!response.ok) throw new Error(`Failed to fetch model ${url}: ${response.status} ${response.statusText}`);
+  const total = entry.bytes;
   const reader = response.body.getReader();
-  const chunks = [];
+  const data = new Uint8Array(total);
   let received = 0;
-
-  while (true) {
+  for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value);
+    if (received + value.length > total) throw new Error(`${entry.file}: larger than expected`);
+    data.set(value, received);
     received += value.length;
-    if (contentLength) {
-      const dlProgress = received / contentLength;
-      const mb = (received / 1048576).toFixed(1);
-      const totalMb = (contentLength / 1048576).toFixed(0);
-      postProgress(progressBase + dlProgress * progressSpan, `Downloading ${displayName} (${mb}/${totalMb} MB)`);
-    }
+    postProgress(progressBase + (received / total) * progressSpan,
+      `Downloading ${label} (${(received / 1048576).toFixed(0)}/${(total / 1048576).toFixed(0)} MB)`);
   }
-
-  // Combine chunks
-  const data = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    data.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // Cache for next time
+  if (received !== total) throw new Error(`${entry.file}: got ${received} bytes, expected ${total}`);
+  if ((await sha256Hex(data.buffer)) !== entry.sha256) throw new Error(`${entry.file}: checksum mismatch`);
   try {
-    await localforage.setItem(url, data.buffer);
+    await localforage.setItem(key, data.buffer);
   } catch (e) {
-    postLog('Warning: Could not cache model (storage full?)');
+    postLog('Warning: could not cache model (storage full?)');
   }
-
-  postLog(`Downloaded: ${displayName} (${(received / 1048576).toFixed(1)} MB)`);
   return data.buffer;
 }
 
-// ==================== Main Inference Pipeline ====================
+// ==================== Pipeline ====================
 
 async function runInference(config) {
   const { inputData, settings } = config;
   const {
-    selectedModels,
-    threshold = 0.1,
-    nMarkers = 3,
-    modelBaseUrl
+    folds = ['0'], mirror = false, threshold = 0.1, nMarkers = 3, modelBaseUrl,
+    precision = 'w16', backend = 'wasm', biasCorrection = 'makehomogeneous'
   } = settings;
+  const tStart = performance.now();
+  const timing = {};
 
-  // 1. Parse NIfTI input
-  postLog('Parsing input volume...');
+  postProgress(0.01, 'Loading model description...');
+  const manifest = await (await fetch(`${modelBaseUrl}/seedseg-v2.json`, { cache: 'no-cache' })).json();
+  const patch = manifest.patch_size; // [z, y, x]
+  const target = manifest.spacing_zyx;
+  const cls = manifest.marker_class;
+
   postProgress(0.02, 'Reading NIfTI...');
-  const { imageData, dims, voxelSize, headerBytes } = parseNiftiInput(inputData);
-  const [nx, ny, nz] = dims;
-  const [vx, vy, vz] = voxelSize;
-  postLog(`Volume dimensions: ${nx} x ${ny} x ${nz}, voxel: ${vx.toFixed(2)} x ${vy.toFixed(2)} x ${vz.toFixed(2)}mm`);
+  const { imageData, dims: niiDims, voxelSize, affine, headerBytes } = parseNiftiInput(inputData);
+  const [nx, ny, nz] = niiDims;
+  const dims = [nz, ny, nx];
+  const spacing = [voxelSize[2], voxelSize[1], voxelSize[0]];
+  postLog(`Volume ${nx} x ${ny} x ${nz}, voxel ${voxelSize.map((v) => v.toFixed(3)).join(' x ')} mm`);
 
-  // 2. Bias field correction (makehomogeneous)
-  postProgress(0.05, 'Bias field correction...');
-  postLog('Running bias field correction...');
-  const mag64 = new Float64Array(imageData);
-  const corrected64 = qsmWasm.makehomogeneous_wasm(mag64, nx, ny, nz, vx, vy, vz, 7.0, 15);
-  const correctedData = new Float32Array(corrected64);
-  postLog('Bias field correction complete');
+  // 1. Bias field correction. The training images were N4-corrected (SimpleITK); N4 is not
+  // available in the browser, so makehomogeneous (QSM.rs) is used instead.
+  let vol = imageData;
+  if (biasCorrection === 'makehomogeneous') {
+    postProgress(0.04, 'Bias field correction...');
+    const t = performance.now();
+    vol = new Float32Array(qsmWasm.makehomogeneous_wasm(new Float64Array(imageData), nx, ny, nz,
+      voxelSize[0], voxelSize[1], voxelSize[2], 7.0, 15));
+    timing.biasCorrection = (performance.now() - t) / 1000;
+    postLog(`Bias field correction (makehomogeneous): ${timing.biasCorrection.toFixed(1)} s`);
+  }
 
-  // 3. Pad, normalize, and transpose to C-contiguous for ONNX
-  postProgress(0.10, 'Normalizing...');
-  const paddedDims = findPaddedDims(dims, 32);
-  const paddedData = padVolume(correctedData, dims, paddedDims);
-  const normalizedData = zScoreNormalize(paddedData);
-  const [pnx, pny, pnz] = paddedDims;
-  const tensorData = niftiToC(normalizedData, pnx, pny, pnz);
-  postLog(`Padded to: ${pnx} x ${pny} x ${pnz}`);
+  // 2. nnU-Net preprocessing: crop to nonzero, z-score, resample if needed, pad to patch.
+  const box = P.nonzeroBBox(vol, dims);
+  const cropped = P.cropBox(vol, dims, box);
+  P.zscoreInPlace(cropped.data);
+  let work = cropped.data, wdims = cropped.dims;
+  const ns = P.newShape(wdims, spacing, target);
+  const resampled = ns.some((n, i) => n !== wdims[i]);
+  if (resampled) {
+    postLog(`Warning: spacing ${spacing.join('x')} differs from the training spacing ${target.join('x')}; ` +
+      `resampling ${wdims.join('x')} -> ${ns.join('x')} (linear)`);
+    work = P.resampleLinear(work, wdims, ns);
+    wdims = ns;
+  }
+  const padded = P.padToPatch(work, wdims, patch);
+  const gaussian = P.gaussianMap(patch, manifest.gaussian.sigma_scale, manifest.gaussian.value_scaling_factor);
+  const mirrorAxes = mirror ? manifest.mirror_axes : [];
+  const nFlips = P.mirrorSets(mirrorAxes).length;
+  const steps = P.windowSteps(padded.dims, patch, manifest.tile_step_size);
+  const nTiles = steps[0].length * steps[1].length * steps[2].length;
+  postLog(`Sliding window: ${nTiles} patches x ${nFlips} mirrorings x ${folds.length} fold(s), backend ${backend}`);
 
-  // 4. Run each model
-  const allProbMaps = [];
-  const totalModels = selectedModels.length;
-
-  for (let i = 0; i < totalModels; i++) {
-    const modelName = selectedModels[i];
-    const modelUrl = `${modelBaseUrl}/${modelName}`;
-    const perModelSpan = 0.65 / totalModels;
-    const progressBase = 0.15 + i * perModelSpan;
-    const dlSpan = perModelSpan * 0.6;   // 60% of per-model span for download
-    const runBase = progressBase + dlSpan; // remaining 40% for inference
-
-    // Fetch model (with download progress)
-    const modelData = await fetchModel(modelUrl, modelName, progressBase, dlSpan);
-
-    // Create ONNX session
-    postProgress(runBase, `Loading model ${i + 1}/${totalModels}...`);
-    postLog('Creating ONNX InferenceSession...');
-    let session;
-    try {
-      session = await ort.InferenceSession.create(modelData, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
-      });
-    } catch (e) {
-      postLog(`Session creation failed: ${e?.message || String(e)}`);
-      throw e;
-    }
-    postLog(`Session created. Inputs: ${session.inputNames}, Outputs: ${session.outputNames}`);
-
-    // Create input tensor [1, 1, nx, ny, nz] — C-contiguous
-    postProgress(runBase + perModelSpan * 0.2, `Running model ${i + 1}/${totalModels}...`);
-    const inputTensor = new ort.Tensor(
-      'float32',
-      tensorData,
-      [1, 1, pnx, pny, pnz]
-    );
-
-    // Run inference
-    postLog('Running inference...');
-    const inputName = session.inputNames[0];
-    let results;
-    try {
-      results = await session.run({ [inputName]: inputTensor });
-    } catch (e) {
-      postLog(`Inference run failed: ${e?.message || String(e)}`);
-      throw e;
-    }
-    const outputName = session.outputNames[0];
-    const rawOutput = results[outputName].data;
-
-    // Softmax and extract class 1 probability (output is C-contiguous)
-    const voxelCount = pnx * pny * pnz;
-    const probMapC = softmaxExtractClass1(rawOutput, voxelCount, 3);
-
-    // Transpose output back to NIfTI order, then crop
-    const probMapNifti = cToNifti(probMapC, pnx, pny, pnz);
-    const croppedProb = cropVolume(probMapNifti, paddedDims, dims);
-    allProbMaps.push(croppedProb);
-
-    // Send individual model result as NIfTI
-    const modelNifti = createOutputNifti(croppedProb, headerBytes);
-    postStageData(`model${i + 1}`, modelNifti, `Model ${i + 1} seed probability`);
-
-    // Cleanup
-    inputTensor.dispose();
+  // 3. Folds.
+  const Npad = padded.dims[0] * padded.dims[1] * padded.dims[2];
+  const ens = new Float32Array(Npad);
+  const perFoldSpan = 0.85 / folds.length;
+  timing.folds = [];
+  for (let fi = 0; fi < folds.length; fi++) {
+    const f = String(folds[fi]);
+    const entry = manifest.folds[f][precision];
+    const base = 0.08 + fi * perFoldSpan;
+    const modelData = await fetchModel(modelBaseUrl, entry, `fold ${f}`, base, perFoldSpan * 0.3);
+    postProgress(base + perFoldSpan * 0.3, `Loading fold ${f}...`);
+    const t0 = performance.now();
+    const eps = backend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
+    const session = await ort.InferenceSession.create(modelData, { executionProviders: eps, graphOptimizationLevel: 'all' });
+    const t1 = performance.now();
+    const runNet = async (x) => {
+      const out = await session.run({ [manifest.input]: new ort.Tensor('float32', x, [1, 1, ...patch]) });
+      const t = out[manifest.output];
+      const d = t.location && t.location !== 'cpu' ? await t.getData() : t.data;
+      if (t.dispose) t.dispose();
+      return d;
+    };
+    const { logits, C } = await P.slidingWindowLogits(padded.data, padded.dims, patch, runNet, {
+      mirrorAxes, gaussian, step: manifest.tile_step_size,
+      onTile: (i, n) => postProgress(base + perFoldSpan * (0.3 + 0.7 * i / n), `Fold ${f}: patch ${i}/${n}`)
+    });
+    const p = P.softmaxClass(logits, C, Npad, cls);
+    for (let i = 0; i < Npad; i++) ens[i] += p[i] / folds.length;
     await session.release();
-
-    postLog(`Model ${i + 1}/${totalModels} complete`);
+    const t2 = performance.now();
+    timing.folds.push({ fold: f, sessionCreate: (t1 - t0) / 1000, inference: (t2 - t1) / 1000 });
+    postLog(`Fold ${f}: session ${((t1 - t0) / 1000).toFixed(1)} s, inference ${((t2 - t1) / 1000).toFixed(1)} s`);
   }
 
-  // 5. Average probability maps
-  postProgress(0.85, 'Computing consensus...');
-  const avgProb = averageProbabilityMaps(allProbMaps);
-  const avgNifti = createOutputNifti(avgProb, headerBytes);
-  postStageData('avgProb', avgNifti, 'Average probability');
+  // 4. Back to the input grid: unpad, (resample back), uncrop (outside the crop: probability 0).
+  let pm = P.unpad(ens, padded.dims, wdims, padded.lo);
+  if (resampled) pm = P.resampleLinear(pm, wdims, cropped.dims);
+  pm = P.uncropBox(pm, dims, box);
 
-  // 6. Connected component labeling + top-N selection
-  postProgress(0.92, 'Selecting markers...');
-  const consensusMask = selectTopNMarkers(avgProb, dims, nMarkers, threshold);
-  const consensusNifti = createOutputNifti(consensusMask, headerBytes);
-  postStageData('consensus', consensusNifti, 'Consensus segmentation');
+  // 5. Candidates.
+  postProgress(0.95, 'Selecting markers...');
+  const det = P.detect(pm, dims, nMarkers, threshold, voxelSize[0] * voxelSize[1] * voxelSize[2]);
+  const world = (c) => [0, 1, 2].map((r) => affine[r][0] * c[0] + affine[r][1] * c[1] + affine[r][2] * c[2] + affine[r][3]);
+  for (const m of det.markers.concat(det.others)) m.centroidWorldMm = world(m.centroidVox);
+  timing.total = (performance.now() - tStart) / 1000;
 
-  // Count marker voxels
-  let markerVoxels = 0;
-  for (let i = 0; i < consensusMask.length; i++) {
-    if (consensusMask[i] > 0) markerVoxels++;
-  }
-  postLog(`Consensus: ${markerVoxels} voxels in final segmentation`);
-
+  postStageData('probability', createOutputNifti(pm, headerBytes), `Marker probability (mean of ${folds.length} fold(s))`);
+  postStageData('markers', createOutputNifti(det.markerMap, headerBytes), `Top ${nMarkers} markers (value = rank)`);
+  const { markerMap, ...summary } = det; // eslint-disable-line no-unused-vars
+  self.postMessage({ type: 'detections', ...summary, folds, mirror, backend, precision, timing });
+  postLog(`Detected ${det.markers.length}/${nMarkers} markers (${det.nCandidates} candidates)` +
+    (det.countFlag ? ': fewer than the implant count, review the image' : ''));
+  postLog(`Total time ${timing.total.toFixed(1)} s`);
   postProgress(1.0, 'Complete');
-  postComplete();
+  self.postMessage({ type: 'complete' });
 }
 
-// ==================== Message Handler ====================
+// ==================== Message handler ====================
 
 self.onmessage = async (e) => {
   const { type, data } = e.data;
-
-  switch (type) {
-    case 'init':
-      try {
-        ort.env.wasm.numThreads = navigator.hardwareConcurrency > 1 ? 2 : 1;
-        ort.env.wasm.wasmPaths = '../wasm/';
-
-        localforage.config({
-          name: 'SeedSegModelCache',
-          storeName: 'models'
-        });
-
-        // Initialize QSM WASM (for bias field correction)
-        const baseUrl = self.location.href.replace(/\/js\/.*$/, '');
-        const wasmJsUrl = `${baseUrl}/wasm/qsm_wasm.js`;
-        const wasmBinaryUrl = `${baseUrl}/wasm/qsm_wasm_bg.wasm`;
-        qsmWasm = await import(wasmJsUrl);
-        await qsmWasm.default(wasmBinaryUrl);
-
-        self.postMessage({ type: 'initialized' });
-      } catch (error) {
-        postError(`Initialization failed: ${error.message}`);
-      }
-      break;
-
-    case 'run':
-      try {
-        await runInference(data);
-      } catch (error) {
-        console.error('Inference error:', error);
-        const msg = error?.message || String(error);
-        postError(msg);
-      }
-      break;
+  if (type === 'init') {
+    try {
+      const threads = (self.crossOriginIsolated && navigator.hardwareConcurrency)
+        ? Math.min(navigator.hardwareConcurrency, 16) : 1;
+      ort.env.wasm.numThreads = threads;
+      ort.env.wasm.wasmPaths = new URL('../wasm/', self.location.href).href;
+      localforage.config({ name: 'SeedSegModelCache', storeName: 'models' });
+      const baseUrl = self.location.href.replace(/\/js\/.*$/, '');
+      qsmWasm = await import(`${baseUrl}/wasm/qsm_wasm.js`);
+      await qsmWasm.default(`${baseUrl}/wasm/qsm_wasm_bg.wasm`);
+      self.postMessage({ type: 'initialized', threads, webgpu: typeof navigator.gpu !== 'undefined' });
+    } catch (error) {
+      postError(`Initialization failed: ${error.message}`);
+    }
+  } else if (type === 'run') {
+    try {
+      await runInference(data);
+    } catch (error) {
+      console.error('Inference error:', error);
+      postError(error?.message || String(error));
+    }
   }
 };

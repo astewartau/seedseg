@@ -1,19 +1,19 @@
 export const VERSION = '0.2.6';
 
-// Models - relative path (served from same origin, downloaded from OSF at deploy time)
+// Models: nnU-Net v2 ResEnc folds exported to ONNX (scripts/deploy/export_onnx.py).
+// MODEL_BASE_URL holds seedseg-v2.json (patch size, spacing, file names, sizes, SHA-256)
+// and the fold files; each fold is downloaded when first used and cached in IndexedDB.
 export const MODEL_BASE_URL = './models';
 
-export const MODELS = [
-  { name: 'seedseg-model-seed42.onnx', label: 'Model 1 (seed 42)', seed: 42 },
-  { name: 'seedseg-model-seed123.onnx', label: 'Model 2 (seed 123)', seed: 123 },
-  { name: 'seedseg-model-seed456.onnx', label: 'Model 3 (seed 456)', seed: 456 },
-  { name: 'seedseg-model-seed789.onnx', label: 'Model 4 (seed 789)', seed: 789 }
-];
+export const FOLDS = ['0', '1', '2', '3', '4'];
 
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
   nMarkers: 3,
-  padFactor: 32
+  folds: ['0'],
+  mirror: false,
+  precision: 'w16',   // fp16-stored weights, fp32 compute (half the download of fp32)
+  backend: 'wasm'     // ONNX Runtime Web 1.23 WebGPU has no Conv3d kernel
 };
 
 export const VIEWER_CONFIG = {
@@ -32,23 +32,14 @@ export const PROGRESS_CONFIG = {
 
 export const STAGE_NAMES = {
   'input': 'Input T1w',
-  'model1': 'Model 1',
-  'model2': 'Model 2',
-  'model3': 'Model 3',
-  'model4': 'Model 4',
-  'avgProb': 'Avg Prob',
-  'consensus': 'Consensus'
-};
-
-export const ONNX_CONFIG = {
-  executionProviders: ['wasm'],
-  graphOptimizationLevel: 'all'
+  'probability': 'Probability',
+  'markers': 'Markers'
 };
 
 export const CACHE_CONFIG = {
   name: 'SeedSegModelCache',
   storeName: 'models',
-  maxSizeMB: 500
+  maxSizeMB: 1100
 };
 
-if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, MODELS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, ONNX_CONFIG, CACHE_CONFIG };
+if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };

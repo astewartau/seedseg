@@ -77,7 +77,8 @@ class SeedSegApp {
       onStageData: (data) => this.handleStageData(data),
       onComplete: () => this.onInferenceComplete(),
       onError: (msg) => this.onInferenceError(msg),
-      onInitialized: () => {}
+      onInitialized: () => {},
+      onDetections: (det) => this.showDetections(det)
     });
 
     // Modals
@@ -762,19 +763,15 @@ class SeedSegApp {
     const file = this.fileIOController.getActiveFile();
 
     // Gather settings
-    const selectedModels = [];
-    Config.MODELS.forEach((model, i) => {
-      const cb = document.getElementById(`model${i}`);
-      if (!cb || cb.checked) selectedModels.push(model.name);
-    });
-
-    if (selectedModels.length === 0) {
-      this.updateOutput('No models selected');
+    const folds = Config.FOLDS.filter((f) => document.getElementById(`fold${f}`)?.checked);
+    if (folds.length === 0) {
+      this.updateOutput('No model folds selected');
       return;
     }
-
-    const threshold = parseFloat(document.getElementById('probThreshold')?.value || '0.1');
-    const nMarkers = parseInt(document.getElementById('nMarkers')?.value || '3');
+    const mirror = !!document.getElementById('mirrorTTA')?.checked;
+    const backend = document.getElementById('backendSelect')?.value || Config.INFERENCE_DEFAULTS.backend;
+    const threshold = parseFloat(document.getElementById('probThreshold')?.value || String(Config.INFERENCE_DEFAULTS.threshold));
+    const nMarkers = parseInt(document.getElementById('nMarkers')?.value || String(Config.INFERENCE_DEFAULTS.nMarkers));
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
 
     // Read file
@@ -794,7 +791,10 @@ class SeedSegApp {
     await this.inferenceExecutor.run({
       inputData,
       settings: {
-        selectedModels,
+        folds,
+        mirror,
+        backend,
+        precision: Config.INFERENCE_DEFAULTS.precision,
         threshold,
         nMarkers,
         modelBaseUrl
@@ -814,12 +814,8 @@ class SeedSegApp {
 
   static STAGE_NAMES = {
     input: 'Input',
-    model1: 'Model 1',
-    model2: 'Model 2',
-    model3: 'Model 3',
-    model4: 'Model 4',
-    avgProb: 'Average',
-    consensus: 'Consensus'
+    probability: 'Probability',
+    markers: 'Markers'
   };
 
   handleStageData(data) {
@@ -838,9 +834,9 @@ class SeedSegApp {
     // Add stage button if not already present
     this.addStageButton(data.stage);
 
-    // Auto-show consensus when it arrives
-    if (data.stage === 'consensus') {
-      this.showResult('consensus');
+    // Auto-show the detected markers when they arrive
+    if (data.stage === 'markers') {
+      this.showResult('markers');
     }
   }
 
@@ -924,7 +920,7 @@ class SeedSegApp {
     if (overlayColormapSelect) overlayColormapSelect.classList.remove('hidden');
 
     // Determine colormap based on stage type
-    const colormap = (stage === 'consensus') ? 'red' : 'warm';
+    const colormap = (stage === 'markers') ? 'red' : 'warm';
 
     // Sync overlay colormap select
     if (overlayColormapSelect) overlayColormapSelect.value = colormap;
@@ -934,9 +930,41 @@ class SeedSegApp {
   }
 
   disableAllResultTabs() {
-    // Clear dynamically added stage buttons
+    // Clear dynamically added stage buttons and the marker list
     const container = document.getElementById('stageButtons');
     if (container) container.innerHTML = '';
+    const panel = document.getElementById('detectionsPanel');
+    if (panel) { panel.innerHTML = ''; panel.classList.add('hidden'); }
+  }
+
+  /** Marker list: rank, mean probability, position; count flag when fewer than K were found. */
+  showDetections(det) {
+    const panel = document.getElementById('detectionsPanel');
+    if (!panel) return;
+    const n = det.markers.length;
+    const flag = det.countFlag
+      ? `<div class="detections-flag warn"><strong>Check:</strong> ${n} of ${det.k} markers found (${det.nCandidates} candidate${det.nCandidates === 1 ? '' : 's'}). Review the image.</div>`
+      : `<div class="detections-flag">${n} of ${det.k} markers found.</div>`;
+    const rows = det.markers.map((m) => {
+      const w = m.centroidWorldMm.map((v) => v.toFixed(1)).join(', ');
+      return `<tr class="clickable" data-vox="${m.centroidVox.join(',')}" title="Voxel ${m.centroidVox.map((v) => v.toFixed(1)).join(', ')}">
+        <td>${m.rank}</td><td>${m.meanProb.toFixed(3)}</td><td>${m.volumeMm3.toFixed(0)}</td><td>${w}</td></tr>`;
+    }).join('');
+    const next = det.others.length ? `Next candidate: mean probability ${det.others[0].meanProb.toFixed(3)}.` : '';
+    const t = det.timing?.total ? ` ${det.timing.total.toFixed(0)} s, ${det.folds.length} fold(s)${det.mirror ? ', mirroring' : ''}.` : '';
+    panel.innerHTML = `${flag}<table class="detections-table"><thead><tr><th>#</th><th>Mean p</th><th>mm³</th><th>Position (mm)</th></tr></thead>
+      <tbody>${rows}</tbody></table><div class="detections-meta">${next}${t}</div>`;
+    panel.classList.remove('hidden');
+    panel.querySelectorAll('tr.clickable').forEach((tr) => {
+      tr.addEventListener('click', () => {
+        const v = tr.dataset.vox.split(',').map(Number);
+        const vol = this.nv.volumes?.[0];
+        if (!vol) return;
+        const frac = [0, 1, 2].map((i) => (v[i] + 0.5) / vol.dims[i + 1]);
+        this.nv.scene.crosshairPos = frac;
+        this.nv.updateGLVolume();
+      });
+    });
   }
 
   clearResults() {

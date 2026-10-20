@@ -5,24 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$SCRIPT_DIR/wasm"
 
 # ONNX Runtime Web
-ORT_VERSION="1.17.0"
+ORT_VERSION="1.23.2"
 ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist"
 
 echo "Downloading ONNX Runtime Web v${ORT_VERSION}..."
 
+# WebGPU build: provides both the 'webgpu' and 'wasm' execution providers
 ORT_FILES=(
-  ort.min.js
-  ort-wasm.js
-  ort-wasm.wasm
-  ort-wasm-simd.js
-  ort-wasm-simd.wasm
-  ort-wasm-simd-threaded.js
-  ort-wasm-simd-threaded.wasm
+  ort.webgpu.min.js
+  ort-wasm-simd-threaded.asyncify.mjs
+  ort-wasm-simd-threaded.asyncify.wasm
 )
 
 for f in "${ORT_FILES[@]}"; do
   echo "  $f"
-  curl -sL -o "$SCRIPT_DIR/wasm/$f" "$ORT_BASE/$f"
+  curl -fsSL -o "$SCRIPT_DIR/wasm/$f" "$ORT_BASE/$f"
 done
 
 # QSM WASM (bias field correction from QSMbly)
@@ -38,7 +35,7 @@ QSM_FILES=(
 
 for f in "${QSM_FILES[@]}"; do
   echo "  $f"
-  curl -sL -o "$SCRIPT_DIR/wasm/$f" "$QSM_BASE/$f"
+  curl -fsSL -o "$SCRIPT_DIR/wasm/$f" "$QSM_BASE/$f"
 done
 
 echo "Done. Files saved to wasm/"

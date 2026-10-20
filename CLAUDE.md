@@ -62,7 +62,7 @@ Custom 3D UNet (`UNet3D` in `scripts/training/train_one_model.py`):
 ### Training Data: `data/train/`
 
 - ~98 subject directories, ~93 usable (5 excluded: 2 missing T1, 1 invalid segmentation, 2 non-prostate)
-- Subject naming: `z{ID}` (e.g., `z0110968`)
+- Subject naming: patient identifiers are replaced by study codes in committed files (`S001`–`S127` study cohort, `E01`–`E09` independent test set)
 - Per-subject files:
   - `z{ID}_MRI_homogeneity-corrected.nii` -- N4 bias-corrected T1w (model input)
   - `roi_niftis_mri_space/z{ID}_seeds.nii.gz` -- combined 3-class segmentation

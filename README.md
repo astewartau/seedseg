@@ -49,6 +49,19 @@ Outputs: `results/sub_marker_prob.nii.gz` and `results/sub_detections.json` (top
 
 Tests (wiring only, tiny data): `pytest scripts/deploy/tests` and `node --test web/tests/*.test.mjs`.
 
+## Training and evaluation (nnU-Net model)
+
+| Folder | Contents |
+|---|---|
+| `scripts/labels/` | Reference labels from the clinical DICOM data, and automatic labels from planning CT ([README](scripts/labels/README.md)) |
+| `scripts/nnunet/` | nnU-Net dataset conversion, cross-validation splits, training and probability export ([README](scripts/nnunet/README.md)) |
+| `scripts/evaluation/` | Marker detection evaluation: top-K candidates, one-to-one matching within 5 mm, confidence intervals, paired comparisons |
+| `scripts/deploy/` | ONNX export and the ONNX Runtime inference pipeline used by the web app and the OpenRecon container |
+| `scripts/paper/` | Manuscript figures |
+| `scripts/synth/`, `scripts/rerank/` | Synthetic marker insertion and candidate re-ranking |
+
+Patient identifiers in these files are replaced by study codes (S001–S127, E01–E09).
+
 ## Citation
 
 Stewart et al. "Deep-Learning-Enabled Differentiation between Intraprostatic Gold Fiducial Markers and Calcification in Quantitative Susceptibility Mapping." bioRxiv (2023). https://doi.org/10.1101/2023.10.26.564293

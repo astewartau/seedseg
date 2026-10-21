@@ -27,7 +27,7 @@ SUMMARY_CSV = os.path.join(OUTPUT_DIR, "subject_summary.csv")
 STAGING_DIR = "/home/uqaste15/data/2024-prostate/tmp-staging"
 
 # Skip non-prostate subjects
-SKIP_SUBJECTS = {'z3475893', 'z1873164'}  # liver, CEST brain
+SKIP_SUBJECTS = {'O02', 'O01'}  # liver, CEST brain
 
 # ============================================================
 # Helpers

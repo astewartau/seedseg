@@ -62,7 +62,7 @@ for fname in sorted(os.listdir(df25)):
         continue
     # Skip the per-subject archives and backups we already handle
     if fname in ("GS data sets.zip", "Gold seed data sets for JG.zip",
-                 "NEW_retro_DATA_04.06.25.zip", "z0772718_structure.zip"):
+                 "NEW_retro_DATA_04.06.25.zip", "S038_structure.zip"):
         continue
     if 'backup' in fname.lower():
         continue

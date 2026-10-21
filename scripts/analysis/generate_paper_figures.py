@@ -138,8 +138,8 @@ def plot_per_subject():
     ax.grid(True, axis='y', alpha=0.3)
 
     # Mark val vs test
-    val_subjects = ['z0008611', 'z0193682', 'z0324733', 'z0357537', 'z0443426',
-                    'z1255320', 'z1451132', 'z1452029', 'z3308417']
+    val_subjects = ['S001', 'S014', 'S022', 'S025', 'S032',
+                    'S047', 'S057', 'S059', 'S120']
     for i, s in enumerate(subjects):
         if s in val_subjects:
             ax.axvspan(i - 0.5, i + 0.5, alpha=0.08, color='green')

@@ -25,7 +25,7 @@ conda activate prostate39
 cd /scratch/user/uqaste15/2024-prostate
 
 MODELS=(models/production/T1-*-best.pth)
-INPUT=data/test/prepared/z0008611/z0008611_MRI_homogeneity-corrected.nii
+INPUT=data/test/prepared/S001/S001_MRI_homogeneity-corrected.nii
 OUTDIR=results/timing_test
 
 echo ""

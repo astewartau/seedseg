@@ -248,7 +248,7 @@ def main():
     print(f"Found {len(model_paths)} production models")
 
     # All 5 failure subjects
-    failure_subjects = ['z1219334', 'z1738777', 'z3159051']
+    failure_subjects = ['S044', 'S078', 'S110']
 
     def get_paths(sid):
         for base in ['data/test/prepared', 'data/train']:

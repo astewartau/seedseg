@@ -175,7 +175,7 @@ def main():
     model_paths = sorted(glob.glob('models/production/*-best.pth'))
     print(f"Found {len(model_paths)} production models")
 
-    subjects = ['z0307189', 'z3455734', 'z1257295']
+    subjects = ['S019', 'S121', 'S048']
 
     def get_mri_path(sid):
         for base in ['data/test/prepared', 'data/train']:

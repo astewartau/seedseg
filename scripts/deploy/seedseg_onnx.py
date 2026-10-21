@@ -123,7 +123,9 @@ class SeedSegONNX:
     input grid (C, z, y, x) for a (z, y, x) volume in SimpleITK array order."""
 
     def __init__(self, model_dir, folds=None, mirror=True, device='cpu', threads=None, precision='fp32',
-                 batch_size=None, log=print):
+                 batch_size=None, lazy=False, log=print):
+        """lazy: create each network's session only while it runs and release it afterwards, so GPU
+        memory holds one network at a time instead of all of them."""
         import onnxruntime as ort
         self.dir = Path(model_dir)
         self.meta = json.loads((self.dir / 'seedseg-v2.json').read_text())
@@ -145,11 +147,11 @@ class SeedSegONNX:
         else:
             prov = ['CPUExecutionProvider']
         self.batch = batch_size or (len(mirror_sets(self.mirror_axes)) if device == 'cuda' else 1)
-        self.sessions = []
-        for f in self.folds:
-            fn = self.dir / self.meta['folds'][f][precision]['file']
-            self.sessions.append(ort.InferenceSession(str(fn), so, providers=prov))
-        self.providers = self.sessions[0].get_providers()
+        self._make = lambda f: ort.InferenceSession(str(self.dir / self.meta['folds'][f][precision]['file']), so,
+                                                    providers=prov)
+        self.lazy = lazy
+        self.sessions = [] if lazy else [self._make(f) for f in self.folds]
+        self.providers = (self._make(self.folds[0]) if lazy else self.sessions[0]).get_providers()
         self.gauss = gaussian_map(self.patch, self.meta['gaussian']['sigma_scale'],
                                   self.meta['gaussian']['value_scaling_factor'])
 
@@ -201,16 +203,18 @@ class SeedSegONNX:
             self.log(f'resampling {data.shape} -> {tuple(ns)} (spacing {sp} -> {self.spacing})')
             data = resample(data, ns)
         mean, per_fold = None, []
-        for f, sess in zip(self.folds, self.sessions):
+        for i, f in enumerate(self.folds):
             t = time.time()
+            sess = self._make(f) if self.lazy else self.sessions[i]
             p = softmax(self._logits(sess, data), 0)
+            del sess
             if resampled:  # nnU-Net resamples logits (order 1) before softmax; close enough off-protocol
                 p = np.stack([resample(c, np.array(vol[sl].shape), order=1) for c in p])
             self.log(f'fold {f}: {time.time() - t:.1f} s')
             mean = p.copy() if mean is None else mean + p
             if return_folds:
                 per_fold.append(p)
-        mean /= len(self.sessions)
+        mean /= len(self.folds)
         out = np.zeros((mean.shape[0], *vol.shape), np.float32)
         out[0] = 1.0  # outside the crop: background
         out[(slice(None), *sl)] = mean

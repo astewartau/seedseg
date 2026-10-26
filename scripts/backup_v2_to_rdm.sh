@@ -8,9 +8,10 @@ R=/scratch/user/uqaste15/prostate-v2
 SRC=/scratch/user/uqaste15/src
 REPO=$SRC/seedseg
 DEST=${DEST:-/QRISdata/Q0748/data/prostate/v2}
-ONNX=${ONNX:-/home/uqaste15/tmp/claude-1100003445/-home-uqaste15/11ce6247-8f9d-519d-9b98-33e69c3c67a1/scratchpad/models}
+# Released preprint ONNX models: already in $DEST/models/released_onnx (and on OSF f7hjv); set ONNX=<dir> only to re-copy them.
+ONNX=${ONNX:-}
 RS=(rsync -rlt --chmod=ug+rwX,o-rwx)   # no owner/group/perms: the RDM enforces its own group (Q0748RW)
-mkdir -p "$DEST"/{docs,code,data,models,predictions,evaluation,archive}
+mkdir -p "$DEST"/{docs,code,data,models,predictions,evaluation,deploy,archive}
 cd "$R"
 
 # docs
@@ -37,25 +38,28 @@ cp fresh/subjects_fresh.txt "$DEST/data/external/"
 "${RS[@]}" fresh/images/ "$DEST/data/external/images/"
 "${RS[@]}" fresh/labels/ "$DEST/data/external/labels/"
 
-# models: nnU-Net results (final checkpoints, plans, logs; no checkpoint_best/latest or validation npz)
+# models: nnU-Net results (final checkpoints, plans, logs, validation segmentations and summaries;
+# no checkpoint_best/latest or validation npz, no 5-epoch smoke test)
 for d in nnunet/nnUNet_results nnunet/nnUNet_results_r*; do
   [ -d "$d" ] || continue
-  "${RS[@]}" --prune-empty-dirs --exclude='nnUNetTrainer_5epochs__*/' --include='*/' \
-    --include='checkpoint_final.pth' --include='plans.json' --include='dataset.json' \
-    --include='dataset_fingerprint.json' --include='training_log_*.txt' --include='progress.png' \
-    --include='debug.json' --exclude='*' "$d/" "$DEST/models/$(basename "$d")/"
+  "${RS[@]}" --prune-empty-dirs --exclude='nnUNetTrainer_5epochs__*/' \
+    --exclude='checkpoint_best.pth' --exclude='checkpoint_latest.pth' --exclude='validation/*.npz' \
+    "$d/" "$DEST/models/$(basename "$d")/"
 done
 "${RS[@]}" "$SRC/seedseg-nnunet/scripts/nnunet/splits/" "$DEST/models/splits/"
-[ -d "$ONNX" ] && "${RS[@]}" "$ONNX/" "$DEST/models/released_onnx/"
+if [ -n "$ONNX" ] && [ -d "$ONNX" ]; then "${RS[@]}" "$ONNX/" "$DEST/models/released_onnx/"
+else echo "released_onnx: no ONNX source given, keeping $DEST/models/released_onnx as is"; fi
 
 # predictions: probability maps on the image grid
 for d in nnunet/predictions nnunet/predictions_*; do
   [ -d "$d" ] || continue
-  "${RS[@]}" --exclude='test_ensemble_raw/' "$d/" "$DEST/predictions/study_$(basename "$d")/"
+  "${RS[@]}" "$d/" "$DEST/predictions/study_$(basename "$d")/"
 done
 "${RS[@]}" eval/released_probs/ "$DEST/predictions/study_released/"
-"${RS[@]}" --no-links --exclude='raw/' --exclude='cache/' --exclude='released_npz/' fresh/pred/ "$DEST/predictions/external/"
-for d in fresh/pred_*; do [ -d "$d" ] && "${RS[@]}" --no-links --exclude='raw/' --exclude='cache/' "$d/" "$DEST/predictions/external_${d#fresh/pred_}/"; done
+[ -d eval/probs_avg ] && "${RS[@]}" eval/probs_avg/ "$DEST/predictions/study_avg501_511/"
+# external set: symlinks (mprob/, 511r*_fold*) point at files synced here too; cache/ = constellation cache
+"${RS[@]}" --no-links --exclude='cache/' fresh/pred/ "$DEST/predictions/external/"
+for d in fresh/pred_*; do [ -d "$d" ] && "${RS[@]}" --no-links --exclude='cache/' "$d/" "$DEST/predictions/external_${d#fresh/pred_}/"; done
 
 # evaluation
 "${RS[@]}" eval/results/ "$DEST/evaluation/results/"
@@ -63,14 +67,20 @@ for d in fresh/pred_*; do [ -d "$d" ] && "${RS[@]}" --no-links --exclude='raw/' 
 "${RS[@]}" --exclude='*.npy' --exclude='*.json' fresh/work/ "$DEST/evaluation/external_labelling_work/" 2>/dev/null || true
 "${RS[@]}" logs/ "$DEST/evaluation/slurm_logs/"
 
+# deploy: ONNX export, parity, browser/WebGPU, container and OpenRecon tests (hard links kept;
+# container images, Apptainer caches, a pip env and browser profiles are not copied)
+[ -d deploy ] && "${RS[@]}" -H --exclude='*.sif' --exclude='cache/' --exclude='container_bench/ortgpu_env/' \
+  --exclude='webgpu_probe/tmp.*/' deploy/ "$DEST/deploy/"
+
 # archive: record of the invalid first 521 run (labels without marker class); its models are not kept
-"${RS[@]}" invalid_521_20261019/README.txt invalid_521_20261019/labels_original_sphere invalid_521_20261019/eval \
+# (the scratch copy was deleted on 2026-10-26 after this archive was made; skip when absent)
+[ -d invalid_521_20261019 ] && "${RS[@]}" invalid_521_20261019/README.txt invalid_521_20261019/labels_original_sphere invalid_521_20261019/eval \
   "$DEST/archive/invalid_521_20261019/"
 
 # README + inventory
 { cat "$REPO/scripts/rdm_README.md"
   echo; echo "## Inventory (generated $(date '+%Y-%m-%d %H:%M'))"; echo; echo '```'
-  (cd "$DEST" && du -sh --apparent-size docs code data/* models/* predictions/* evaluation/* archive/* 2>/dev/null)
+  (cd "$DEST" && du -sh --apparent-size docs code data/* models/* predictions/* evaluation/* deploy/* archive/* 2>/dev/null)
   echo; echo "Models with checkpoint_final:"
   (cd "$DEST/models" && ls -d nnUNet_results*/*/*/fold_* 2>/dev/null | while read f; do if [ -f "$f/checkpoint_final.pth" ]; then echo "  $f"; fi; done) || true
   echo '```'; } > "$DEST/README.md"

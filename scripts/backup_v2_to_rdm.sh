@@ -14,11 +14,16 @@ RS=(rsync -rlt --chmod=ug+rwX,o-rwx)   # no owner/group/perms: the RDM enforces 
 mkdir -p "$DEST"/{docs,code,data,models,predictions,evaluation,deploy,archive}
 cd "$R"
 
-# docs
+# docs (SKIP_DOCS=1 leaves docs/ untouched: on 2026-10-26 docs/V2_PLAN.md was stuck on the NFS server
+# and any access to it hung; the current docs are in the code bundle as well)
+DOCS=docs
+if [ "${SKIP_DOCS:-0}" = 1 ]; then echo "docs: skipped (SKIP_DOCS=1)"; DOCS=
+else
 cp "$REPO/V2_PLAN.md" "$REPO/METHODS_V2.md" "$DEST/docs/"
 cp "$REPO/scripts/labels/README.md" "$DEST/docs/labels_README.md"
 cp "$SRC/seedseg-synth/scripts/synth/README.md" "$DEST/docs/synth_README.md"
 cp "$SRC/seedseg-nnunet/scripts/nnunet/README.md" "$DEST/docs/nnunet_README.md"
+fi
 
 # code: one bundle with every branch (v2-labels, v2-nnunet, v2-synth) and full history
 git -C "$REPO" bundle create "$DEST/code/seedseg-v2.bundle.tmp" --all 2>/dev/null
@@ -80,7 +85,7 @@ for d in fresh/pred_*; do [ -d "$d" ] && "${RS[@]}" --no-links --exclude='cache/
 # README + inventory
 { cat "$REPO/scripts/rdm_README.md"
   echo; echo "## Inventory (generated $(date '+%Y-%m-%d %H:%M'))"; echo; echo '```'
-  (cd "$DEST" && du -sh --apparent-size docs code data/* models/* predictions/* evaluation/* deploy/* archive/* 2>/dev/null)
+  (cd "$DEST" && du -sh --apparent-size $DOCS code data/* models/* predictions/* evaluation/* deploy/* archive/* 2>/dev/null)
   echo; echo "Models with checkpoint_final:"
   (cd "$DEST/models" && ls -d nnUNet_results*/*/*/fold_* 2>/dev/null | while read f; do if [ -f "$f/checkpoint_final.pth" ]; then echo "  $f"; fi; done) || true
   echo '```'; } > "$DEST/README.md"

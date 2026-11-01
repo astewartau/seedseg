@@ -41,6 +41,35 @@ def gate_works(cases, out, models, n4, threads, device="cpu"):
             j = int(np.argmin(dist)) if dist else -1
             if j >= 0 and dist[j] <= HIT_MM and j not in used:
                 hit += 1; used.add(j)
+        # what the errors are: missed markers (and the marker probability near them) and the
+        # false-positive / extra detections (nearest simulated distractor or vessel, in prostate?)
+        lab = np.asarray(nib.load(f"{out}/labels/{case}.nii.gz").dataobj)
+        calcs = np.array([c_["center_vox"] for c_ in rec["calcs"]]).reshape(-1, 3)
+        vess = np.array([v_["centre_mm"] for v_ in rec["render"].get("vessels", [])]).reshape(-1, 2) / z[:2]
+        g = np.indices(pm.shape).reshape(3, -1).T
+        misses = []
+        for i, t in enumerate(truth):
+            if any(np.linalg.norm((np.array(dets[j]["centroid_vox"]) - t) * z) <= HIT_MM for j in used):
+                continue
+            near = np.linalg.norm((g - t) * z, axis=1) <= 5.0
+            mk = rec["markers"][i]
+            misses.append(dict(marker=i, context=mk["context"], theta_deg=mk["theta_deg"], dchi_ppm=mk["dchi_ppm"],
+                               void_area_mm2=mk.get("void_area_mm2_minslice"),
+                               max_prob_5mm=float(pm.reshape(-1)[near].max())))
+        errs = []
+        for r_, x in enumerate(dets + d["others"]):
+            if r_ < len(dets) and r_ in used:
+                continue
+            c_ = np.array(x["centroid_vox"])
+            ci = tuple(np.clip(np.round(c_).astype(int), 0, np.array(lab.shape) - 1))
+            errs.append(dict(rank=x["rank"], mean_prob=x["mean_prob"], top3=r_ < len(dets),
+                             in_prostate=bool(lab[ci] >= 1),
+                             nearest_calc_mm=float(np.linalg.norm((calcs - c_) * z, axis=1).min()) if len(calcs) else None,
+                             nearest_vessel_mm=float(np.linalg.norm((vess - c_[:2]) * z[:2], axis=1).min()) if len(vess) else None,
+                             nearest_marker_mm=float(np.linalg.norm((truth - c_) * z, axis=1).min())))
+        os.makedirs(f"{out}/detections", exist_ok=True)
+        json.dump(dict(case=case, path="raw+N4" if n4 else "N4-like", detections=d, misses=misses, errors=errs),
+                  open(f"{out}/detections/{case}_{'raw' if n4 else 'n4'}.json", "w"), indent=1)
         rows.append(dict(case=case, path="raw+N4" if n4 else "N4-like", markers=len(truth), found=hit,
                          fp=len(dets) - len(used), extra_candidates=len(d["others"]),
                          n_candidates=d["n_candidates"], count_flag=d["count_flag"],

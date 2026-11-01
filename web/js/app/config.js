@@ -22,6 +22,14 @@ export const LEGACY_SHA256 = {
   'seedseg-model-seed789.onnx': 'e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5'
 };
 
+// Example data: synthetic demo cases (no patient data) in the Hugging Face dataset
+// ash347/seedseg-demo, pinned to one commit like the models. Hugging Face resolve URLs are
+// public and CORS-enabled and return Content-Length, which drives the download progress bar.
+export const EXAMPLE_DATA = {
+  baseUrl: 'https://huggingface.co/datasets/ash347/seedseg-demo/resolve/d48dd5d3f005feb3f43b4b666332eede9e2837f0',
+  files: ['demo-001_T1w.nii.gz']
+};
+
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
   nMarkers: 3,
@@ -57,4 +65,4 @@ export const CACHE_CONFIG = {
   maxSizeMB: 1100
 };
 
-if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, MODEL_BASE_URL, MODEL_DIRS, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };
+if (typeof self !== 'undefined') self.SeedSegConfig = { VERSION, EXAMPLE_DATA, MODEL_BASE_URL, MODEL_DIRS, FOLDS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, CACHE_CONFIG };

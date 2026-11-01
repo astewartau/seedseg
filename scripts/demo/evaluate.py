@@ -18,6 +18,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "deploy"))
 import anatomy as A  # noqa: E402
 
 HIT_MM = 4.0

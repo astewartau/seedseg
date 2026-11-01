@@ -26,7 +26,7 @@ ORGANS = ["bladder", "rectum", "prostate", "marrow", "seminal"]
 
 def gate_works(cases, out, models, n4, threads, device="cpu"):
     import seedseg_onnx as SO
-    m = SO.SeedSegONNX(models, threads=threads, device=device, log=None)
+    m = SO.SeedSegONNX(models, threads=threads, device=device, batch_size=2, log=None)
     rows = []
     for case in cases:
         src = f"{out}/raw/{case}.nii.gz" if n4 else f"{out}/images/{case}.nii.gz"

@@ -21,9 +21,7 @@ the MR field of view), {out}/{sid}_img.nii.gz (float32, r units) and {out}/{sid}
 import argparse, glob, json, os, re, subprocess, tempfile
 import numpy as np
 import nibabel as nib
-import pydicom
 import scipy.ndimage as ndi
-from matplotlib.path import Path
 from scipy.spatial.transform import Rotation
 
 ROOT = "/scratch/user/uqaste15/prostate-v2"
@@ -72,6 +70,7 @@ def roi_planes(rs, num):
 
 
 def inside_roi(planes, pts):
+    from matplotlib.path import Path
     """Even-odd point-in-ROI test for CT-frame points (n, 3) on the nearest contour plane;
     points beyond half a plane spacing outside the ROI's z range are outside."""
     out = np.zeros(len(pts), bool)
@@ -121,6 +120,7 @@ def grid_points(ctr_mm):
 
 
 def subject(sid, out):
+    import pydicom
     mrec = json.load(open(f"{ROOT}/labelfix/markers/{sid}.json"))
     rrec = json.load(open(f"{ROOT}/labelfix/refined/{sid}.json"))
     im = nib.load(f"{ROOT}/images/{sid}.nii")

@@ -1990,3 +1990,13 @@ input[type="range"]:disabled::-moz-range-thumb {
   color: var(--color-text-muted);
   margin-top: var(--space-xs);
 }
+
+.btn-example {
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  margin-top: var(--space-sm);
+}

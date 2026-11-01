@@ -127,6 +127,9 @@ class SeedSegApp {
     // Unified file input
     this._setupUnifiedDropZone();
 
+    // Load example data button
+    document.getElementById('loadExampleData')?.addEventListener('click', () => this._loadExampleData());
+
     document.getElementById('selectAllFolds')?.addEventListener('click', () => {
       Config.FOLDS.forEach((f) => { const cb = document.getElementById(`fold${f}`); if (cb) cb.checked = true; });
     });
@@ -303,6 +306,62 @@ class SeedSegApp {
     });
   }
 
+  /**
+   * Fetch the synthetic example case from Hugging Face and load it like a dropped file.
+   */
+  async _loadExampleData() {
+    const btn = document.getElementById('loadExampleData');
+    const { baseUrl, files } = Config.EXAMPLE_DATA;
+    const label = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.textContent = 'Downloading example data...';
+    this.updateOutput('Downloading example data (synthetic, not patient data)...');
+    this.setProgress(0, 'Downloading example data...');
+
+    try {
+      // HEAD requests first, to learn the total size for the progress bar
+      const sizes = await Promise.all(files.map(async (name) => {
+        const resp = await fetch(`${baseUrl}/${name}`, { method: 'HEAD' });
+        return parseInt(resp.headers.get('Content-Length') || '0', 10);
+      }));
+      const totalBytes = sizes.reduce((a, b) => a + b, 0);
+      const perFileBytes = new Array(files.length).fill(0);
+      const updateProgress = () => {
+        const done = perFileBytes.reduce((a, b) => a + b, 0);
+        const frac = totalBytes > 0 ? done / totalBytes : 0;
+        this.setProgress(frac, `Downloaded ${(done / 1e6).toFixed(1)} / ${(totalBytes / 1e6).toFixed(1)} MB`);
+      };
+
+      const fetched = await Promise.all(files.map(async (name, i) => {
+        const resp = await fetch(`${baseUrl}/${name}`);
+        if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
+        const reader = resp.body.getReader();
+        const chunks = [];
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          perFileBytes[i] += value.byteLength;
+          updateProgress();
+        }
+        return new File([new Blob(chunks)], name);
+      }));
+
+      this.updateOutput(`Downloaded ${fetched.length} file(s). Loading...`);
+      this._handleUnifiedFiles(fetched);
+      this.setProgress(0, '');
+      this.updateOutput('Example data loaded. Press Run to detect the markers.');
+    } catch (err) {
+      this.setProgress(0, '');
+      this.updateOutput(`Error loading example data: ${err.message}`);
+      console.error('Example data load failed:', err);
+    } finally {
+      btn.innerHTML = label;
+      this._onBucketsChanged();
+    }
+  }
+
   _handleUnifiedFiles(files) {
     const niftiFiles = [];
     const dicomFiles = [];
@@ -395,6 +454,10 @@ class SeedSegApp {
       this.fileIOController.clearFile();
       if (runBtn) runBtn.disabled = true;
     }
+
+    // Example data only makes sense before files are loaded
+    const exampleBtn = document.getElementById('loadExampleData');
+    if (exampleBtn) exampleBtn.disabled = hasFiles;
 
     // Update drop zone label
     const label = document.getElementById('unifiedDrop')?.querySelector('.file-drop-label span');

@@ -26,7 +26,7 @@ export const LEGACY_SHA256 = {
 // ash347/seedseg-demo, pinned to one commit like the models. Hugging Face resolve URLs are
 // public and CORS-enabled and return Content-Length, which drives the download progress bar.
 export const EXAMPLE_DATA = {
-  baseUrl: 'https://huggingface.co/datasets/ash347/seedseg-demo/resolve/EXAMPLE_COMMIT',
+  baseUrl: 'https://huggingface.co/datasets/ash347/seedseg-demo/resolve/d48dd5d3f005feb3f43b4b666332eede9e2837f0',
   files: ['demo-001_T1w.nii.gz']
 };
 

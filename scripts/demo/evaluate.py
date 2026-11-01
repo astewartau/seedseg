@@ -9,7 +9,8 @@ Safe:   the case's 1 mm class map is compared with every real subject's anatomy 
         on CTV-centred grids, no registration, which favours finding similarity). For
         each synthetic case the highest mean Dice to any real subject must stay below
         the 95th percentile of the real nearest-neighbour Dice (each real subject vs the
-        most similar other real subject).
+        most similar other real subject), and, for plausibility, at or above its 5th
+        percentile.
 """
 import argparse, glob, json, os, sys
 import numpy as np
@@ -99,13 +100,15 @@ def gate_safe(cases, out, anat, subjects):
             RR[i, j] = RR[j, i] = organ_dice(real[sids[i]], real[sids[j]])
     nn_real = np.nanmax(RR, 1)
     thr = float(np.percentile(nn_real, 95))
+    floor = float(np.percentile(nn_real, 5))   # plausibility: no less similar to everyone than real patients are
     rows = []
     for case in cases:
         L = np.asarray(nib.load(f"{out}/anat1mm/{case}_lab.nii.gz").dataobj)
         d = np.array([organ_dice(L, real[s]) for s in sids])
-        rows.append(dict(case=case, nearest_real_dice=float(d.max()), threshold=thr,
-                         safe=bool(d.max() < thr), median_real_dice=float(np.median(d))))
-    return rows, dict(real_nn_dice_median=float(np.median(nn_real)), real_nn_dice_p95=thr,
+        rows.append(dict(case=case, nearest_real_dice=float(d.max()), threshold=thr, floor=floor,
+                         safe=bool(d.max() < thr), plausible=bool(d.max() >= floor),
+                         median_real_dice=float(np.median(d))))
+    return rows, dict(real_nn_dice_median=float(np.median(nn_real)), real_nn_dice_p95=thr, real_nn_dice_p5=floor,
                       real_nn_dice_max=float(nn_real.max()))
 
 

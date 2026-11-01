@@ -28,7 +28,8 @@ def select(src, n):
     w = pd.read_csv(f"{src}/gate_works.csv")
     s = pd.read_csv(f"{src}/gate_safe.csv")
     ok = w.assign(good=(w.found == 3) & (w.fp == 0) & (w.extra_candidates == 0)).groupby("case").good.all()
-    ok = ok[ok].index.intersection(s[s.safe].case)
+    keep = s.safe & (s.plausible if "plausible" in s else True)
+    ok = ok[ok].index.intersection(s[keep].case)
     ncalc = {c: len(json.load(open(f"{src}/params/{c}.json"))["calcs"]) for c in ok}
     # round-robin over distractor counts so the release shows 1, 2 and 3 distractors
     groups = {k: sorted(c for c in ok if ncalc[c] == k) for k in sorted(set(ncalc.values()))}

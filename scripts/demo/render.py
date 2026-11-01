@@ -76,19 +76,27 @@ def render(atlas, app, ctv_vox, rng):
     field = field.reshape(fshape).transpose(2, 1, 0, 3)     # (x, y, z, 3), mm
     G = np.array(atlas["grid_mm"]); ds = float(atlas["field_spacing"])
 
+    # the sampled deformation can move the prostate off the grid centre; shift the render
+    # window so the prostate lands at the intended position in the field of view
+    P = atlas["P"]
+    gp = np.stack(np.meshgrid(*[np.arange(0, n, 2, dtype=np.float32) for n in G], indexing="ij"), 0)
+    up = np.stack([ndi.map_coordinates(field[..., k], gp / ds, order=1, mode="nearest") for k in range(3)], 0)
+    pp = ndi.map_coordinates(P[A.C["prostate"]].astype(np.float32), (gp + up).reshape(3, -1), order=1).reshape(gp.shape[1:])
+    shift = (np.array(ndi.center_of_mass(pp)) * 2 - (G - 1) / 2) if pp.sum() > 0 else np.zeros(3)
+    del gp, up, pp
+
     # fine render grid -> subject 1 mm grid index coordinates
     fine = (SHAPE[0], SHAPE[1], SHAPE[2] * SUB)
     fvox = np.array([VOX[0], VOX[1], VOX[2] / SUB])
     off = [(np.arange(fine[0]) - ctv_vox[0]) * VOX[0],
            (np.arange(fine[1]) - ctv_vox[1]) * VOX[1],
            ((np.arange(fine[2]) + 0.5) / SUB - 0.5 - ctv_vox[2]) * VOX[2]]
-    Y = np.stack(np.meshgrid(*[o + (n - 1) / 2 for o, n in zip(off, G)], indexing="ij"), 0).astype(np.float32)
+    Y = np.stack(np.meshgrid(*[o + (n - 1) / 2 + sh for o, n, sh in zip(off, G, shift)], indexing="ij"), 0).astype(np.float32)
     U = np.stack([ndi.map_coordinates(field[..., k], Y / ds, order=1, mode="nearest") for k in range(3)], 0)
     Tc = (Y + U).reshape(3, -1)
     del Y, U
 
     mu, noise, low, tex = draw_appearance(app, rng)
-    P = atlas["P"]
     W = np.zeros((P.shape[0],) + fine, np.float32)
     for c in range(P.shape[0]):
         W[c] = ndi.map_coordinates(P[c].astype(np.float32) / 255, Tc, order=1, mode="nearest").reshape(fine)
@@ -141,7 +149,7 @@ def render(atlas, app, ctv_vox, rng):
     lab1 = lab1.reshape(tuple(G)).astype(np.uint8)
     return S, prost, lab1, w_air, dict(shape_z=z.tolist(), mu=dict(zip(A.CLASSES, mu.tolist())), noise=noise,
                           low=dict(zip(A.CLASSES, low.tolist())), tex=dict(zip(A.CLASSES, tex.tolist())),
-                          knobs={k: v for k, v in K.items()}, **extra)
+                          knobs={k: v for k, v in K.items()}, prostate_shift_mm=shift.tolist(), **extra)
 
 
 def add_vessels(S, H, fvox, rng, K):

@@ -351,14 +351,14 @@ class SeedSegApp {
       this.updateOutput(`Downloaded ${fetched.length} file(s). Loading...`);
       this._handleUnifiedFiles(fetched);
       this.setProgress(0, '');
-      this.updateOutput('Example data loaded. Press Run to detect the markers.');
+      this.updateOutput('Example case added (synthetic). Press Run Segmentation to detect the markers.');
     } catch (err) {
       this.setProgress(0, '');
       this.updateOutput(`Error loading example data: ${err.message}`);
       console.error('Example data load failed:', err);
+      btn.disabled = false;
     } finally {
       btn.innerHTML = label;
-      this._onBucketsChanged();
     }
   }
 

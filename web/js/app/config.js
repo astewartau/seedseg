@@ -30,6 +30,9 @@ export const EXAMPLE_DATA = {
   files: ['demo-001_T1w.nii.gz']
 };
 
+// dicompare (DICOM protocol report): embed modules, worker and schema, loaded on first use.
+export const DICOMPARE_BASE = 'https://astewartau.github.io/dicompare-web';
+
 export const INFERENCE_DEFAULTS = {
   threshold: 0.1,
   nMarkers: 3,

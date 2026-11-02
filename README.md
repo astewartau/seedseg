@@ -59,6 +59,7 @@ Tests (wiring only, tiny data): `pytest scripts/deploy/tests` and `node --test w
 | `scripts/deploy/` | ONNX export and the ONNX Runtime inference pipeline used by the web app and the OpenRecon container |
 | `scripts/paper/` | Manuscript figures |
 | `scripts/synth/`, `scripts/rerank/` | Synthetic marker insertion and candidate re-ranking |
+| `scripts/demo/` | Synthetic demo cases without patient data, as in the Hugging Face dataset [ash347/seedseg-demo](https://huggingface.co/datasets/ash347/seedseg-demo) used by the web app's example button ([README](scripts/demo/README.md)) |
 
 Patient identifiers in these files are replaced by study codes (S001–S127, E01–E09).
 

@@ -54,6 +54,10 @@ blood-product-like distractors in the prostate.
   slice displacement and the noise floor. The model was validated against 361 real
   marker voids.
 
+The full method, parameters and reproduction steps are in
+[`scripts/demo/README.md`](https://github.com/astewartau/seedseg/blob/main/scripts/demo/README.md)
+of the SeedSeg repository.
+
 No voxel of any patient image is in this dataset. Only label-derived population
 models and summary statistics were used. Each synthetic anatomy was compared with
 every source anatomy (mean Dice over bladder, rectum, prostate, bone marrow and

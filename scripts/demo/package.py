@@ -21,7 +21,9 @@ import pandas as pd
 
 ACQ = dict(MagneticFieldStrength=3.0, RepetitionTime=0.6, EchoTime=0.00666, FlipAngle=80,
            SliceThickness=2.0, MRAcquisitionType="2D", ScanningSequence="GR", SequenceVariant="SP",
-           PulseSequenceType="2D spoiled gradient echo (FLASH)")
+           PulseSequenceType="2D spoiled gradient echo (FLASH)", ProtocolName="t1_fl2d_tra",
+           SequenceName="*fl2d1r", PixelBandwidth=400, ParallelReductionFactorInPlane=2,
+           InPlanePhaseEncodingDirection="ROW")
 
 
 def select(src, n):
@@ -64,7 +66,7 @@ def write_dicom(vol, aff, folder, case_id, series_uid_root):
         ds.SOPClassUID = meta.MediaStorageSOPClassUID; ds.SOPInstanceUID = meta.MediaStorageSOPInstanceUID
         ds.StudyInstanceUID = study; ds.SeriesInstanceUID = series; ds.FrameOfReferenceUID = frame
         ds.Modality = "MR"; ds.PatientName = f"Synthetic^{case_id}"; ds.PatientID = f"SEEDSEG-{case_id.upper()}"
-        ds.PatientSex = "M"; ds.PatientPosition = "HFS"; ds.BodyPartExamined = "PROSTATE"
+        ds.PatientSex = "M"; ds.PatientPosition = "HFS"; ds.BodyPartExamined = "PELVIS"
         ds.StudyDate = ds.SeriesDate = ds.ContentDate = date; ds.StudyTime = ds.SeriesTime = "120000"
         ds.StudyDescription = "SeedSeg synthetic demo"; ds.SeriesDescription = "t1_fl2d_tra_synthetic"
         ds.Manufacturer = "SeedSeg synthetic"; ds.InstitutionName = "Synthetic"
@@ -74,6 +76,11 @@ def write_dicom(vol, aff, folder, case_id, series_uid_root):
         ds.EchoTime = ACQ["EchoTime"] * 1000; ds.FlipAngle = ACQ["FlipAngle"]; ds.SliceThickness = ACQ["SliceThickness"]
         ds.SpacingBetweenSlices = float(sp[2]); ds.MRAcquisitionType = "2D"
         ds.ScanningSequence = "GR"; ds.SequenceVariant = "SP"; ds.ScanOptions = ""
+        # protocol tags the SeedSeg dicompare schema checks (Manufacturer is left synthetic)
+        ds.ProtocolName = ACQ["ProtocolName"]; ds.SequenceName = ACQ["SequenceName"]
+        ds.PixelBandwidth = ACQ["PixelBandwidth"]; ds.NumberOfAverages = 1
+        ds.ParallelReductionFactorInPlane = float(ACQ["ParallelReductionFactorInPlane"])
+        ds.InPlanePhaseEncodingDirection = ACQ["InPlanePhaseEncodingDirection"]
         ds.ImageOrientationPatient = [float(x) for x in np.r_[row_dir, col_dir]]
         ds.ImagePositionPatient = [float(x) for x in (lps @ np.array([0, 0, k, 1]))[:3]]
         ds.SliceLocation = float(ds.ImagePositionPatient[2])

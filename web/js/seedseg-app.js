@@ -1107,11 +1107,12 @@ class SeedSegApp {
    */
   _loadDicompare() {
     this.dicompareLoad ||= Promise.all([
-      import('https://dicompare.neurodesk.org/embed/DicompareController.js'),
-      import('https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js')
+      import(`${Config.DICOMPARE_BASE}/embed/DicompareController.js`),
+      import(`${Config.DICOMPARE_BASE}/embed/DicompareReportRenderer.js`)
     ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
       this.dicompareController = new DicompareController({
-        schemaUrl: 'https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json',
+        schemaUrl: `${Config.DICOMPARE_BASE}/schemas/SeedSeg_Prostate_T1w_v1.0.json`,
+        workerUrl: `${Config.DICOMPARE_BASE}/embed/dicompare-worker.js`,
         updateOutput: (msg) => this.updateOutput(msg)
       });
       this.dicompareRenderer = new DicompareReportRenderer();
@@ -1121,9 +1122,9 @@ class SeedSegApp {
       const btn = document.getElementById('dicompareReportBtn');
       if (btn) {
         btn.disabled = true;
-        btn.title = 'dicompare could not be loaded from dicompare.neurodesk.org';
+        btn.title = `dicompare could not be loaded from ${Config.DICOMPARE_BASE}`;
       }
-      this.updateOutput('dicompare report unavailable: could not load it from dicompare.neurodesk.org');
+      this.updateOutput(`dicompare report unavailable: could not load it from ${Config.DICOMPARE_BASE}`);
       return false;
     });
     return this.dicompareLoad;

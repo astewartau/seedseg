@@ -197,7 +197,11 @@ class SeedSegONNX:
         sl = tuple(slice(lo, hi) for lo, hi in box)
         data = zscore(vol[sl])
         sp = np.array(spacing_zyx if spacing_zyx is not None else self.spacing, float)
+        if not (np.all(np.isfinite(sp)) and np.all(sp > 0)):
+            raise ValueError(f'invalid voxel spacing {sp} (z, y, x); it must be finite and positive')
         ns = new_shape_for(data.shape, sp, self.spacing)
+        if np.any(ns < 1):
+            raise ValueError(f'image {data.shape} at spacing {sp} resamples to {tuple(ns)} at {self.spacing}')
         resampled = np.any(ns != np.array(data.shape))
         if resampled:
             self.log(f'resampling {data.shape} -> {tuple(ns)} (spacing {sp} -> {self.spacing})')

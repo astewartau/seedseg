@@ -11,7 +11,7 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 
-P = '/scratch/user/uqaste15/prostate-v2'
+P = '/scratch/user/uqaste15/projects/prostate/v2'
 BOX, EDGE, TXT, ARR = '#dfe6ee', '#5b7083', '#1d2a36', '#3d5163'
 ORANGE, BLUE = '#ff9f1c', '#2ec4f1'
 

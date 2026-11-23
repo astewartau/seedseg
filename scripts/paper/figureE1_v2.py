@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-R = '/scratch/user/uqaste15/prostate-v2/nnunet/nnUNet_results/Dataset511_SeedSegCvAll_corrected/nnUNetTrainer__nnUNetResEncUNetMPlans__3d_fullres'
+R = '/scratch/user/uqaste15/projects/prostate/v2/nnunet/nnUNet_results/Dataset511_SeedSegCvAll_corrected/nnUNetTrainer__nnUNetResEncUNetMPlans__3d_fullres'
 
 
 def parse(f):

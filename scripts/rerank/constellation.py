@@ -37,7 +37,7 @@ from scipy.stats import gaussian_kde
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'evaluation'))
 from evaluate_detections import candidates as find_candidates, clopper_pearson  # noqa: E402
 
-P = '/scratch/user/uqaste15/prostate-v2'
+P = '/scratch/user/uqaste15/projects/prostate/v2'
 OOF = P + '/nnunet/predictions/Dataset511_SeedSegCvAll_corrected/nnUNetTrainer__nnUNetResEncUNetMPlans/oof'
 LAMS = [0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0]
 
@@ -116,7 +116,7 @@ def select(cs, K, prior, lam):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--candidates', default=P + '/eval/results/nnunet511_all127_candidates.csv')
-    ap.add_argument('--folds', default='/scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/splits/splits_final_Dataset511_SeedSegCvAll_corrected.json')
+    ap.add_argument('--folds', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'nnunet', 'splits', 'splits_final_Dataset511_SeedSegCvAll_corrected.json'))
     ap.add_argument('--thr', type=float, default=0.1)
     ap.add_argument('--extra-thr', type=float, default=None, help='add low-threshold candidates (e.g. 1e-3)')
     ap.add_argument('--k', type=int, default=None, help='fixed set size (default: implant count from record)')

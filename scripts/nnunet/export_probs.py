@@ -3,7 +3,7 @@
 
 nnU-Net (SimpleITKIO) stores ``probabilities`` as (C, z, y, x); we transpose
 to (x, y, z) and use the affine of the matching raw image, so outputs overlay
-directly on /scratch/user/uqaste15/prostate-v2/images/{sid}.nii.
+directly on /scratch/user/uqaste15/projects/prostate/v2/images/{sid}.nii.
 
 Per case writes:
   {sid}_marker_prob.nii.gz   float32 (x,y,z), class 1 (gold marker) probability

@@ -11,7 +11,7 @@ import numpy as np
 import nibabel as nib
 from scipy import ndimage as ndi
 
-ROOT = "/scratch/user/uqaste15/prostate-v2"
+ROOT = "/scratch/user/uqaste15/projects/prostate/v2"
 HALF = (12, 12, 3)  # patch half-size in voxels (i, j, k)
 
 

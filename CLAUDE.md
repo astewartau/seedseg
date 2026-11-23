@@ -256,6 +256,8 @@ The dev server (run.sh) sets `Cross-Origin-Opener-Policy: same-origin` and `Cros
   - `seedseg-deploy`: ONNX export, parity and tests (`scripts/deploy/`);
   - `seedseg-deploy-gpu`: GPU parity.
   All three use Python 3.11.9, torch 2.6.0+cu124 and nnunetv2 2.8.1. They are self-contained: no conda env and no `--system-site-packages`.
+  `scripts/nnunet/env.sh` puts `seedseg-train` on `PATH`; the deploy Slurm scripts call the deploy envs' `python` directly. `SCR` defaults to `/scratch/user/uqaste15`.
+- Bunya clone: `~/code/seedseg` (`SEEDSEG_REPO` in `env.sh`; override it for a worktree). v2 data root: `$SCR/projects/prostate/v2`.
 - Legacy: the v1 scripts (`scripts/training/`, parts of `scripts/evaluation/` and `scripts/analysis/`) still activate the old conda env `prostate39` (Python 3.9, PyTorch with CUDA 12.1, torchio). That env no longer exists, and the paper doesn't use v1 models.
 - HPC: QRIS Bunya cluster, SLURM, A100/H100 GPUs (never `gpu_viz`)
 - Account: `a_ai_collab`

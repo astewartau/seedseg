@@ -10,10 +10,10 @@
 #SBATCH --mem=32G
 #SBATCH --time=01:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/deploy/logs/%x_%A_%a.out
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/deploy/logs/%x_%A_%a.out
 set -euo pipefail
 : "${MODELS:?}" "${INT8:?}" "${INPUTS:?}" "${SUBJECTS:?}" "${OUT:?}"
 F=${SLURM_ARRAY_TASK_ID:-0}
-/scratch/user/uqaste15/envs/seedseg-deploy/bin/python "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/logit_parity.py" \
+"${SCR:-/scratch/user/uqaste15}/projects/prostate/env/seedseg-deploy/bin/python" "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/logit_parity.py" \
     --models "$MODELS" --inputs "$INPUTS" --subjects "$SUBJECTS" --fold "$F" \
     --variant webgpu="$MODELS" --variant webgpu16="$MODELS" --variant int8="$INT8" --out "$OUT/logit_parity_fold$F.json"

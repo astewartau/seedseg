@@ -18,7 +18,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import physics as P  # noqa: E402
 
-OUT = "/scratch/user/uqaste15/prostate-v2/synthetic/validation"
+OUT = "/scratch/user/uqaste15/projects/prostate/v2/synthetic/validation"
 
 
 def sphere_check():

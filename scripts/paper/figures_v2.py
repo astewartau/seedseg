@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 
-P = '/scratch/user/uqaste15/prostate-v2'
+P = '/scratch/user/uqaste15/projects/prostate/v2'
 OOF = P + '/eval/probs_511'
 CV_CANDS = P + '/eval/results/nnunet511_all127_candidates.csv'
 MARKERS = P + '/eval/analysis/markers_511.csv'

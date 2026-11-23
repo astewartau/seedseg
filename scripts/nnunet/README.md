@@ -1,7 +1,8 @@
 # nnU-Net v2 baselines for SeedSeg
 
-nnU-Net v2 (`nnunetv2` 2.8.1, PyTorch 2.6.0 + CUDA 12.4, Python 3.11; conda env
-`seedseg-nnunet`) trained on the prepared v2 data in
+nnU-Net v2 (`nnunetv2` 2.8.1, PyTorch 2.6.0 + CUDA 12.4, Python 3.11; uv env
+`seedseg-train` at `$SCR/projects/prostate/env/seedseg-train`, built from
+`envs/seedseg-train.lock.txt`, see `envs/README.md`) trained on the prepared v2 data in
 `<root>/` (images `images/{sid}.nii`, labels
 `labels/{variant}/{sid}.nii.gz`, classes 0 background / 1 marker / 2 prostate).
 nnU-Net folders: `<root>/nnunet/nnUNet_{raw,preprocessed,results}`.
@@ -11,7 +12,7 @@ Logs: `<root>/logs/`.
 
 | File | Purpose |
 |---|---|
-| `env.sh` | Activates `seedseg-nnunet`, sets `nnUNet_raw/_preprocessed/_results`. |
+| `env.sh` | Puts `seedseg-train` first on `PATH`, sets `nnUNet_raw/_preprocessed/_results` (under `$SCR/projects/prostate/v2/nnunet`) and `SEEDSEG_REPO` (default `~/code/seedseg`). |
 | `convert.py` | Builds a raw dataset for a label variant and design; writes `dataset.json` and a fixed `splits_final.json` (also copied to `nnUNet_preprocessed` and `splits/`). `--synthetic` adds `synthetic/{variant}/` cases. |
 | `splits/folds_{cvall,temporal}_seed0.json` | Fold assignment of real subjects, generated once (seed 0) and shared by all label variants. |
 | `preprocess.slurm` | `nnUNetv2_plan_and_preprocess -pl nnUNetPlannerResEncM -c 3d_fullres` (CPU, `general`). |
@@ -44,6 +45,10 @@ temporal+synthetic 4). Variant indices are append-only (`VARIANT_INDEX` in `conv
 Names: `Dataset{ID}_SeedSeg{CvAll,Temporal}[Syn]_{variant}`.
 
 ## Running
+
+The Slurm scripts source `env.sh` from `$SEEDSEG_REPO` (default `~/code/seedseg`, a clone of
+this repo on Bunya; `git clone https://github.com/astewartau/seedseg.git ~/code/seedseg` in a
+job if it is missing). To run a worktree instead, export `SEEDSEG_REPO=<worktree>` before `sbatch`.
 
 ```bash
 source scripts/nnunet/env.sh

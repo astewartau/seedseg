@@ -9,9 +9,7 @@
 #SBATCH --mem=48G
 #SBATCH --time=01:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/deploy/logs/%x_%j.out
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/deploy/logs/%x_%j.out
 set -euo pipefail
 : "${MODEL:?}" "${OUT:?}"
-source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
-export PATH=/scratch/user/uqaste15/envs/seedseg-deploy/bin:$PATH
-python "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/export_onnx.py" --model "$MODEL" --folds 0 1 2 3 4 --out "$OUT" --fp16 --check
+"${SCR:-/scratch/user/uqaste15}/projects/prostate/env/seedseg-deploy/bin/python" "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/export_onnx.py" --model "$MODEL" --folds 0 1 2 3 4 --out "$OUT" --fp16 --check

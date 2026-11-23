@@ -24,7 +24,7 @@ import nibabel as nib
 import scipy.ndimage as ndi
 from scipy.spatial.transform import Rotation
 
-ROOT = "/scratch/user/uqaste15/prostate-v2"
+ROOT = "/scratch/user/uqaste15/projects/prostate/v2"
 DICOM = "/QRISdata/Q0748/data/prostate/dicoms-organized"
 
 CLASSES = ["air", "soft_dark", "soft_mid", "soft_bright", "marrow", "cortex", "bladder", "rectum", "gas",

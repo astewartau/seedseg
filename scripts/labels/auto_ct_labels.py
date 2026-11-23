@@ -62,7 +62,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from refine_and_rasterise import void_map, ball, interp, refine, TOL_MM, VIS_THR  # noqa: E402
 from derive_markers import is_marker, roi_centroid  # noqa: E402
 
-P = '/scratch/user/uqaste15/prostate-v2'
+P = '/scratch/user/uqaste15/projects/prostate/v2'
 CT_THR, PEAK_MIN, VOL_MIN, VOL_MAX, LINK_MM, MAX_MARKERS, SPLIT_MM = 2000.0, 2500.0, 4.0, 80.0, 60.0, 5, 5.0
 MIN_DEPTH_MM = 30.0  # gold markers lie deep in the pelvis; skin/couch markers do not
 PAIR_TOL, MAX_ROT_DEG, SPIN_STEP, SNAP_MM = 2.5, 13.0, 2.0, 2.0

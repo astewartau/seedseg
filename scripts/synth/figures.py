@@ -161,7 +161,7 @@ def meanvoid(real, sim, out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", default="base")
-    ap.add_argument("--dir", default="/scratch/user/uqaste15/prostate-v2/synthetic/validation")
+    ap.add_argument("--dir", default="/scratch/user/uqaste15/projects/prostate/v2/synthetic/validation")
     a = ap.parse_args()
     m = json.load(open(f"{a.dir}/metrics_{a.variant}.json"))
     z = np.load(f"{a.dir}/patches_{a.variant}.npz")

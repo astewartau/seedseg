@@ -6,6 +6,6 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/deploy/logs/%x_%j.out
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/deploy/logs/%x_%j.out
 set -euo pipefail
-/scratch/user/uqaste15/envs/seedseg-deploy/bin/python "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/make_w16.py" "$MODELS"
+"${SCR:-/scratch/user/uqaste15}/projects/prostate/env/seedseg-deploy/bin/python" "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/make_w16.py" "$MODELS"

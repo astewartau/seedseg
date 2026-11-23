@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import nibabel as nib  # noqa: E402
 import numpy as np  # noqa: E402
 
-ROOT = "/scratch/user/uqaste15/prostate-v2"
+ROOT = "/scratch/user/uqaste15/projects/prostate/v2"
 
 
 def main():

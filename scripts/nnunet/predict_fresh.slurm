@@ -10,13 +10,13 @@
 #SBATCH --mem=64G
 #SBATCH --time=06:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/logs/nnunet_predfresh_%A_%a.out
-#SBATCH --error=/scratch/user/uqaste15/prostate-v2/logs/nnunet_predfresh_%A_%a.err
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_predfresh_%A_%a.out
+#SBATCH --error=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_predfresh_%A_%a.err
 set -euo pipefail
 : "${DATASET:?}" "${IN:?}" "${OUT:?}"
 FOLD=${SLURM_ARRAY_TASK_ID:-0}
 TRAINER=${TRAINER:-nnUNetTrainer}; PLANS=${PLANS:-nnUNetResEncUNetMPlans}
-source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
+source "${SEEDSEG_REPO:-$HOME/code/seedseg}/scripts/nnunet/env.sh"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-24}
 o="$OUT/${DATASET}_fold$FOLD"
 nnUNetv2_predict -i "$IN" -o "$o/raw" -d "$DATASET" -c 3d_fullres -tr "$TRAINER" -p "$PLANS" -f "$FOLD" \

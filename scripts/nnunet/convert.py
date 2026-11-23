@@ -43,7 +43,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-ROOT = Path("/scratch/user/uqaste15/prostate-v2")
+ROOT = Path("/scratch/user/uqaste15/projects/prostate/v2")
 REPO_SPLITS = Path(__file__).resolve().parent / "splits"
 NNUNET_ROOT = ROOT / "nnunet"
 N_FOLDS = 5

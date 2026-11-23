@@ -12,10 +12,10 @@
 #SBATCH --mem=64G
 #SBATCH --time=01:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/deploy/logs/%x_%j.out
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/deploy/logs/%x_%j.out
 set -euo pipefail
 : "${MODELS:?}" "${INPUTS:?}" "${SUBJECTS:?}" "${OUT:?}" "${RAW:?}"
-PY=/scratch/user/uqaste15/envs/seedseg-deploy-gpu/bin/python
+PY="${SCR:-/scratch/user/uqaste15}/projects/prostate/env/seedseg-deploy-gpu/bin/python"
 S="${SLURM_SUBMIT_DIR:-.}/scripts/deploy"
 nvidia-smi -L
 $PY "$S/bench.py" --models "$MODELS" --input "$RAW" --device cuda --five-mirror

@@ -5,7 +5,7 @@ Usage
   python scripts/synth/generate.py --subjects all --variant corrected --k 2 --seed 0 \
       [--label-mode sphere|footprint] [--nproc 16] [--set readout_axis=0 --set bw_px=250]
 
-Outputs (root = /scratch/user/uqaste15/prostate-v2/synthetic/{variant})
+Outputs (root = /scratch/user/uqaste15/projects/prostate/v2/synthetic/{variant})
   images/{sid}_syn{k}.nii.gz   int16 (same header/scaling convention as the source)
   labels/{sid}_syn{k}.nii.gz   uint8: source label variant + synthetic markers (class 1)
   params/{sid}_syn{k}.json     every simulation parameter (reproducible from the JSON)
@@ -32,7 +32,7 @@ import real_voids as R  # noqa: E402
 from insert import insert_sources, PATCH_HALF  # noqa: E402
 from physics import Acquisition, Grid, axis_from_angles, b0_dir_voxel_frame  # noqa: E402
 
-ROOT = "/scratch/user/uqaste15/prostate-v2"
+ROOT = "/scratch/user/uqaste15/projects/prostate/v2"
 
 # Acquisition settings validated against real voids (validate.py --variant final):
 # off-resonance slice displacement with RF bandwidth 1300 Hz, positive polarity.

@@ -5,7 +5,7 @@ import json, sys, numpy as np, pandas as pd
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import binomtest
 import nibabel as nib
-P = '/scratch/user/uqaste15/prostate-v2'; R = P + '/eval/results'
+P = '/scratch/user/uqaste15/projects/prostate/v2'; R = P + '/eval/results'
 TOL, K = 5.0, 3
 subs = open(P + '/subjects.txt').read().split(); test = set(open(P + '/eval/test25.txt').read().split())
 refs = {}

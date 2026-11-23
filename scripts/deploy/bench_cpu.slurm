@@ -7,7 +7,7 @@
 #SBATCH --mem=24G
 #SBATCH --time=01:30:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/deploy/logs/%x_%j.out
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/deploy/logs/%x_%j.out
 set -euo pipefail
 lscpu | grep -E "Model name|^CPU\(s\)"
-/scratch/user/uqaste15/envs/seedseg-deploy/bin/python "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/bench.py" --models "$MODELS" --input "$RAW" --device cpu
+"${SCR:-/scratch/user/uqaste15}/projects/prostate/env/seedseg-deploy/bin/python" "${SLURM_SUBMIT_DIR:-.}/scripts/deploy/bench.py" --models "$MODELS" --input "$RAW" --device cpu

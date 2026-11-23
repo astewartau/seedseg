@@ -16,14 +16,14 @@
 #SBATCH --mem=96G
 #SBATCH --time=72:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/logs/nnunet_train_%A_%a.out
-#SBATCH --error=/scratch/user/uqaste15/prostate-v2/logs/nnunet_train_%A_%a.err
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_train_%A_%a.out
+#SBATCH --error=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_train_%A_%a.err
 set -euo pipefail
 : "${DATASET:?set DATASET=<id>}"
 FOLD=${FOLD:-${SLURM_ARRAY_TASK_ID:-0}}
 TRAINER=${TRAINER:-nnUNetTrainer}
 PLANS=${PLANS:-nnUNetResEncUNetMPlans}
-source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
+source "${SEEDSEG_REPO:-$HOME/code/seedseg}/scripts/nnunet/env.sh"
 export nnUNet_n_proc_DA=${nnUNet_n_proc_DA:-$(( ${SLURM_CPUS_PER_TASK:-12} - 2 ))}
 echo "Dataset $DATASET fold $FOLD trainer $TRAINER plans $PLANS on $(hostname) at $(date)"
 nvidia-smi || { echo "No GPU available, exiting."; exit 1; }

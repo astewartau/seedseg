@@ -25,7 +25,7 @@ from scipy.special import gammaln
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import validate as V  # noqa: E402
 
-OUT = "/scratch/user/uqaste15/prostate-v2/synthetic/validation"
+OUT = "/scratch/user/uqaste15/projects/prostate/v2/synthetic/validation"
 
 
 def chi_mean_ratio(n):

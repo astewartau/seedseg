@@ -66,7 +66,7 @@ DCHIS = np.array([-15.0, -25.0, -35.0])
 _CACHE = {}
 
 
-REFINED = "/scratch/user/uqaste15/prostate-v2/labelfix/refined"
+REFINED = "/scratch/user/uqaste15/projects/prostate/v2/labelfix/refined"
 LABEL_VARIANT = "corrected"
 
 
@@ -174,7 +174,7 @@ def main():
                     help="minimum void_strength of refined real markers used as references")
     ap.add_argument("--nproc", type=int, default=16)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default="/scratch/user/uqaste15/prostate-v2/synthetic/validation")
+    ap.add_argument("--out", default="/scratch/user/uqaste15/projects/prostate/v2/synthetic/validation")
     a = ap.parse_args()
     cfg = parse_sets(a.set)
     global THETAS, DCHIS

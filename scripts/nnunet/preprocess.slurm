@@ -9,11 +9,11 @@
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/logs/nnunet_prep_%j.out
-#SBATCH --error=/scratch/user/uqaste15/prostate-v2/logs/nnunet_prep_%j.err
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_prep_%j.out
+#SBATCH --error=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_prep_%j.err
 set -euo pipefail
 : "${DATASET:?set DATASET=<id>}"
-source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
+source "${SEEDSEG_REPO:-$HOME/code/seedseg}/scripts/nnunet/env.sh"
 echo "Preprocessing Dataset $DATASET on $(hostname) at $(date)"
 nnUNetv2_plan_and_preprocess -d "$DATASET" -pl nnUNetPlannerResEncM -c 3d_fullres \
     --verify_dataset_integrity -np "${SLURM_CPUS_PER_TASK:-8}"

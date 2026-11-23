@@ -225,7 +225,7 @@ round-trips exactly (world coordinates) through dcm2niix.
 
 ## Reproducing
 
-Paths are on Bunya. `ROOT` (`/scratch/user/uqaste15/prostate-v2`) holds the v2 images,
+Paths are on Bunya. `ROOT` (`/scratch/user/uqaste15/projects/prostate/v2`) holds the v2 images,
 labels and label records. The DICOM archives are in
 `/QRISdata/Q0748/data/prostate/dicoms-organized`. The work directory used was
 `/scratch/user/uqaste15/demo-synth`.

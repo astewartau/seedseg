@@ -6,7 +6,7 @@ import json, os, sys
 import numpy as np, nibabel as nib, pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rerank'))
 from rerank import cached_maps  # noqa: E402
-P = '/scratch/user/uqaste15/prostate-v2'
+P = '/scratch/user/uqaste15/projects/prostate/v2'
 rows = []
 for s in open(P + '/subjects.txt').read().split():
     rec = json.load(open(f'{P}/labelfix/refined/{s}.json')); ex = set(rec.get('excluded', []))

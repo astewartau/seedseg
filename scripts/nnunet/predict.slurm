@@ -16,14 +16,14 @@
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
 #SBATCH --account=a_ai_collab
-#SBATCH --output=/scratch/user/uqaste15/prostate-v2/logs/nnunet_pred_%j.out
-#SBATCH --error=/scratch/user/uqaste15/prostate-v2/logs/nnunet_pred_%j.err
+#SBATCH --output=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_pred_%j.out
+#SBATCH --error=/scratch/user/uqaste15/projects/prostate/v2/logs/nnunet_pred_%j.err
 set -euo pipefail
 : "${DATASET:?set DATASET=<id>}"
 TRAINER=${TRAINER:-nnUNetTrainer}
 PLANS=${PLANS:-nnUNetResEncUNetMPlans}
 FOLDS=${FOLDS:-0 1 2 3 4}
-source /scratch/user/uqaste15/src/seedseg-nnunet/scripts/nnunet/env.sh
+source "${SEEDSEG_REPO:-$HOME/code/seedseg}/scripts/nnunet/env.sh"
 name=$(basename "$(ls -d "$nnUNet_raw"/Dataset"$(printf %03d "$DATASET")"_*)")
 model="$nnUNet_results/$name/${TRAINER}__${PLANS}__3d_fullres"
 out="$NNUNET_BASE/predictions${RESULTS_TAG:+_$RESULTS_TAG}/$name/${TRAINER}__${PLANS}"

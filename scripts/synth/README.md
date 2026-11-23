@@ -159,7 +159,7 @@ Numerical checks (`physics_checks.json`):
 ## Usage
 
 ```bash
-PY=~/miniconda3/envs/seedseg-synth/bin/python
+PY=$SCR/projects/prostate/env/seedseg-train/bin/python   # seedseg-train covers synth (envs/README.md)
 # generate K cases per subject for a label variant (deterministic in --seed, sid, k)
 $PY scripts/synth/generate.py --subjects all --variant corrected --k 2 --seed 0
 # options: --label-mode footprint, --set readout_axis=0 --set bw_px=250, --param n_markers=[2,3]
@@ -170,6 +170,6 @@ $PY scripts/synth/figures.py --variant ncoilvar
 $PY scripts/synth/test_physics.py
 ```
 
-Outputs go to `prostate-v2/synthetic/{variant}/{images,labels,params}/{sid}_syn{k}.*`.
+Outputs go to `$SCR/projects/prostate/v2/synthetic/{variant}/{images,labels,params}/{sid}_syn{k}.*`.
 The JSON holds every parameter needed to regenerate the case: positions, axes, Δχ,
 distractor geometry, acquisition, grid, noise, seed and git revision.

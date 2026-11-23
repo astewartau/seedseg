@@ -251,8 +251,12 @@ The dev server (run.sh) sets `Cross-Origin-Opener-Policy: same-origin` and `Cros
 
 ## Environment
 
-- Conda env: `prostate39` (Python 3.9)
-- Key packages: PyTorch (CUDA 12.1), torchio, nibabel, scipy, pandas, sklearn
-- HPC: QRIS Bunya cluster, SLURM, A100 GPUs
+- Python envs (v2): uv envs built from the hashed lock files in `envs/` (see `envs/README.md`), at `$SCR/projects/prostate/env/<name>` on Bunya:
+  - `seedseg-train`: nnU-Net (`scripts/nnunet/`), evaluation, re-ranker, labels;
+  - `seedseg-deploy`: ONNX export, parity and tests (`scripts/deploy/`);
+  - `seedseg-deploy-gpu`: GPU parity.
+  All three use Python 3.11.9, torch 2.6.0+cu124 and nnunetv2 2.8.1. They are self-contained: no conda env and no `--system-site-packages`.
+- Legacy: the v1 scripts (`scripts/training/`, parts of `scripts/evaluation/` and `scripts/analysis/`) still activate the old conda env `prostate39` (Python 3.9, PyTorch with CUDA 12.1, torchio). That env no longer exists, and the paper doesn't use v1 models.
+- HPC: QRIS Bunya cluster, SLURM, A100/H100 GPUs (never `gpu_viz`)
 - Account: `a_ai_collab`
 - All scripts should be run from the project root

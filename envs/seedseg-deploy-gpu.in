@@ -1,0 +1,10 @@
+# seedseg-deploy-gpu: GPU parity (onnxruntime-gpu with CUDA/TensorRT providers).
+# = seedseg-train + the packages installed into the venv itself on 20 Oct 2026 (still on disk).
+-r seedseg-train.in
+coloredlogs==15.0.1
+flatbuffers==25.12.19
+humanfriendly==10.0
+ml-dtypes==0.6.0
+onnx==1.23.2
+onnxruntime-gpu==1.23.2
+protobuf==7.36.2

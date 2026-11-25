@@ -105,24 +105,26 @@ def main():
     # Figure 3: failures. Top: false negatives (no candidate). Bottom: a false positive picked instead of a marker.
     missed = subj[subj.missed_only].subject.tolist()
     subst = subj[~subj.missed_only & (subj.fn == 1) & (subj.fp == 1)].subject.tolist()
-    fig, axs = plt.subplots(2, 3, figsize=(9, 6.3))
+    fig, axs = plt.subplots(2, 3, figsize=(9, 6.4))
     for ax, s in zip(axs[0], missed[:3]):
         j = mk[(mk.subject == s) & (mk.cat != 'hit')].marker.tolist()
         _, _, refs, _ = load(P, OOF, s)
-        panel(ax, P, OOF, cv, s, z=int(round(refs[j[0]][2])), fn_refs=j, title='Cross-validation (failures)')
+        panel(ax, P, OOF, cv, s, z=int(round(refs[j[0]][2])), fn_refs=j)
     # substitutions (FN plus FP): the one patient whose FN and FP share a section, then one patient
     # shown at its FN section and at its FP section
-    rows = [(pid('S107'), 'fn', 'Cross-validation (failures)'), (pid('S091'), 'fn', 'Cross-validation (failures)'),
-            (pid('S091'), 'fp', 'Cross-validation (failures)')]
-    for ax, (s, which, ttl) in zip(axs[1], rows):
+    rows = [(pid('S107'), 'fn'), (pid('S091'), 'fn'), (pid('S091'), 'fp')]
+    for ax, (s, which) in zip(axs[1], rows):
         j = mk[(mk.subject == s) & (mk.cat != 'hit')].marker.tolist()
         _, _, refs, _ = load(P, OOF, s)
         fpz = cv[(cv.subject == s) & (cv['rank'] <= 3) & (~cv.is_marker)].z.iloc[0]
         z = int(round(refs[j[0]][2])) if which == 'fn' else int(round(fpz)) if which == 'fp' else None
-        panel(ax, P, OOF, cv, s, z=z, fn_refs=j, title=ttl)
+        panel(ax, P, OOF, cv, s, z=z, fn_refs=j)
     subst = [r[0] for r in rows]
     for ax, l in zip(axs.flat, 'ABCDEF'): ax.text(0.03, 0.95, l, transform=ax.transAxes, color='white', fontsize=11, fontweight='bold', va='top', path_effects=HALO_TXT)
-    fig.tight_layout(); fig.savefig(f'{a.out}/Figure3.png', dpi=300); fig.savefig(f'{a.out}/Figure3.tiff', dpi=300)
+    fig.suptitle('Cross-validation (failures)', fontsize=11, y=0.965)  # one heading for the grid
+    # square panels with even gaps (tight_layout closes the gap between rows once the titles go)
+    fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.923, wspace=0.04, hspace=0.04)
+    fig.savefig(f'{a.out}/Figure3.png', dpi=300); fig.savefig(f'{a.out}/Figure3.tiff', dpi=300)
     print('Figure 2:', cv_pick, fr_pick); print('Figure 3:', missed[:3], subst[:3])
 
 

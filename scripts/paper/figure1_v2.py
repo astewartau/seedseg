@@ -2,7 +2,7 @@
 """Figure 1 (pipeline schematic) for the v2 manuscript, with thumbnails from one patient.
 usage: figure1_v2.py --out <dir> [--subject S010]
 """
-import argparse, json
+import argparse, json, os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -49,6 +49,7 @@ def thumb(fig, rect, img, z, overlay=None, color=None, prob=None, title='', c=(1
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', required=True); ap.add_argument('--subject', default='S010')
     a = ap.parse_args(); s = pid(a.subject)
+    os.makedirs(a.out, exist_ok=True)
     img = np.asarray(nib.load(f'{P}/images/{s}.nii').dataobj, np.float32)
     prob = np.asarray(nib.load(f'{P}/eval/probs_511/{s}.nii.gz').dataobj, np.float32)
     refs = np.array(json.load(open(f'{P}/labelfix/refined/{s}.json'))['markers_final_vox'])
@@ -70,12 +71,15 @@ def main():
     box(ax, 0.25, 0.84, 0.15, 0.1, 'Map to MRI with\nclinical registration')
     box(ax, 0.45, 0.84, 0.15, 0.1, 'Refine to MR\nsignal voids')
     box(ax, 0.45, 0.60, 0.15, 0.1, 'QC: inter-marker\ndistances vs CT')
-    box(ax, 0.66, 0.72, 0.13, 0.1, 'nnU-Net\n5-fold CV\n(5 networks)')
+    box(ax, 0.845, 0.72, 0.13, 0.1, 'nnU-Net\n5-fold CV\n(5 networks)')
     arrow(ax, 0.20, 0.89, 0.25, 0.89); arrow(ax, 0.40, 0.89, 0.45, 0.89); arrow(ax, 0.525, 0.84, 0.525, 0.70)
-    arrow(ax, 0.20, 0.65, 0.66, 0.75); arrow(ax, 0.60, 0.89, 0.66, 0.80)
     arrow(ax, 0.20, 0.69, 0.47, 0.84)  # the refinement snaps markers to voids in the T1 image
-    thumb(fig, [0.83, 0.585, 0.14, 0.335], img, z, overlay=pts, color=BLUE, title='Training labels', c=cc)
-    arrow(ax, 0.83, 0.77, 0.79, 0.77)
+    # two training inputs: the labels (refined positions drawn as spheres) and the images
+    thumb(fig, [0.66, 0.585, 0.14, 0.335], img, z, overlay=pts, color=BLUE, title='Training labels', c=cc)
+    arrow(ax, 0.60, 0.89, 0.66, 0.86)
+    arrow(ax, 0.80, 0.77, 0.845, 0.77)
+    ax.plot([0.125, 0.125, 0.91], [0.60, 0.56, 0.56], color=ARR, lw=1.2)  # images routed under the boxes
+    arrow(ax, 0.91, 0.56, 0.91, 0.72)
 
     # inference row
     box(ax, 0.05, 0.26, 0.12, 0.1, 'T1-weighted MRI\n(N4 corrected)')

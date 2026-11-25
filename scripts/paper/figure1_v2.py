@@ -6,6 +6,7 @@ import argparse, json
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 import nibabel as nib
 import numpy as np
@@ -14,6 +15,11 @@ import pandas as pd
 P = '/scratch/user/uqaste15/projects/prostate/v2'
 BOX, EDGE, TXT, ARR = '#dfe6ee', '#5b7083', '#1d2a36', '#3d5163'
 ORANGE, BLUE = '#ff9f1c', '#2ec4f1'
+CODES = P + '/id_mapping_public_codes.csv'  # study code -> patient id; stays on Bunya, not in git
+
+
+def pid(code):
+    return pd.read_csv(CODES).set_index('study_code').patient_id[code]
 
 
 def box(ax, x, y, w, h, text, fs=8.5):
@@ -34,7 +40,7 @@ def thumb(fig, rect, img, z, overlay=None, color=None, prob=None, title='', c=(1
         ax.imshow(np.ma.masked_less(prob[:, :, z].T, 0.05), cmap='viridis', vmin=0, vmax=1, origin='lower', alpha=0.9)
     if overlay is not None:
         for (x, y) in overlay:
-            ax.add_patch(plt.Circle((x, y), 5, fill=False, lw=1.4, color=color))
+            ax.add_patch(plt.Circle((x, y), 5, fill=False, lw=1.4, color=color, path_effects=[pe.withStroke(linewidth=3, foreground='black')]))
     ax.set_xlim(c[0] - h, c[0] + h); ax.set_ylim(c[1] - h, c[1] + h); ax.set_xticks([]); ax.set_yticks([])
     for s in ax.spines.values(): s.set_color(EDGE)
     ax.set_title(title, fontsize=8.5, color=TXT, pad=3)
@@ -42,7 +48,7 @@ def thumb(fig, rect, img, z, overlay=None, color=None, prob=None, title='', c=(1
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', required=True); ap.add_argument('--subject', default='S010')
-    a = ap.parse_args(); s = a.subject
+    a = ap.parse_args(); s = pid(a.subject)
     img = np.asarray(nib.load(f'{P}/images/{s}.nii').dataobj, np.float32)
     prob = np.asarray(nib.load(f'{P}/eval/probs_511/{s}.nii.gz').dataobj, np.float32)
     refs = np.array(json.load(open(f'{P}/labelfix/refined/{s}.json'))['markers_final_vox'])
@@ -67,6 +73,7 @@ def main():
     box(ax, 0.66, 0.72, 0.13, 0.1, 'nnU-Net\n5-fold CV\n(5 networks)')
     arrow(ax, 0.20, 0.89, 0.25, 0.89); arrow(ax, 0.40, 0.89, 0.45, 0.89); arrow(ax, 0.525, 0.84, 0.525, 0.70)
     arrow(ax, 0.20, 0.65, 0.66, 0.75); arrow(ax, 0.60, 0.89, 0.66, 0.80)
+    arrow(ax, 0.20, 0.69, 0.47, 0.84)  # the refinement snaps markers to voids in the T1 image
     thumb(fig, [0.83, 0.585, 0.14, 0.335], img, z, overlay=pts, color=BLUE, title='Training labels', c=cc)
     arrow(ax, 0.83, 0.77, 0.79, 0.77)
 
@@ -75,9 +82,7 @@ def main():
     box(ax, 0.21, 0.26, 0.12, 0.1, '5 networks\n(sliding window)')
     box(ax, 0.37, 0.26, 0.12, 0.1, 'Average\nprobabilities')
     box(ax, 0.53, 0.26, 0.12, 0.1, 'Keep 3 highest-\nscoring markers')
-    box(ax, 0.53, 0.155, 0.12, 0.075, 'Fewer than implanted?\nFlag for review', fs=7.5)
     for x0, x1 in [(0.17, 0.21), (0.33, 0.37), (0.49, 0.53)]: arrow(ax, x0, 0.31, x1, 0.31)
-    arrow(ax, 0.59, 0.26, 0.59, 0.23)
     thumb(fig, [0.68, 0.16, 0.14, 0.31], img, z, prob=pmax, title='Marker probability', c=cc)
     thumb(fig, [0.84, 0.16, 0.14, 0.31], img, z, overlay=det, color=ORANGE, title='Detected markers', c=cc)
     arrow(ax, 0.65, 0.31, 0.68, 0.31)

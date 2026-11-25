@@ -9,6 +9,7 @@ import argparse, json, os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -23,6 +24,14 @@ FR_PROBS = F + '/pred/511_ens/mprob'
 FR_CANDS = F + '/pred/eval_511_ens_candidates.csv'
 HALF_MM = 30.0
 COL = {'TP': '#ff9f1c', 'FP': '#e71d73', 'FN': '#2ec4f1'}
+# dark edge under every outline and label, so they stay legible on bright tissue
+HALO = [pe.withStroke(linewidth=3.2, foreground='black')]
+HALO_TXT = [pe.withStroke(linewidth=2.4, foreground='black')]
+CODES = P + '/id_mapping_public_codes.csv'  # study code -> patient id; stays on Bunya, not in git
+
+
+def pid(code):
+    return pd.read_csv(CODES).set_index('study_code').patient_id[code]
 
 
 def load(root, probs, sid):
@@ -60,18 +69,19 @@ def panel(ax, root, probs, cands, sid, z=None, fn_refs=(), title=''):
         if abs(zz - z) > 1.0:
             continue
         if kind == 'FN':
-            ax.add_patch(plt.Circle((x, y), 3.0 / zoom[0] * 1.6, fill=False, ls='--', lw=1.6, color=COL['FN']))
+            ax.add_patch(plt.Circle((x, y), 3.0 / zoom[0] * 1.6, fill=False, ls='--', lw=1.6, color=COL['FN'], path_effects=HALO))
         else:
             k = lab[int(round(x)), int(round(y)), int(round(zz))]
             if k:
                 m = (lab[x0:x1, y0:y1, z] == k).astype(float)
-                ax.contour(np.arange(x0, x1), np.arange(y0, y1), m.T, levels=[0.5], colors=COL[kind], linewidths=1.6)
-        ax.text(x + 6, y + 6, kind, color=COL[kind], fontsize=8, fontweight='bold')
+                cs = ax.contour(np.arange(x0, x1), np.arange(y0, y1), m.T, levels=[0.5], colors=COL[kind], linewidths=1.6)
+                cs.set_path_effects(HALO)
+        ax.text(x + 6, y + 6, kind, color=COL[kind], fontsize=9, fontweight='bold', path_effects=HALO_TXT)
     ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
     ax.set_xticks([]); ax.set_yticks([])
     ax.set_title(title, fontsize=9)
     sb = 10.0 / zoom[0]  # 10 mm scale bar
-    ax.plot([x1 - 4 - sb, x1 - 4], [y0 + 5, y0 + 5], color='white', lw=2)
+    ax.plot([x1 - 4 - sb, x1 - 4], [y0 + 5, y0 + 5], color='white', lw=2, path_effects=HALO)
 
 
 def main():
@@ -80,30 +90,30 @@ def main():
     cv = pd.read_csv(CV_CANDS); fr = pd.read_csv(FR_CANDS)
     mk = pd.read_csv(MARKERS)
     subj = pd.read_csv(P + '/eval/results/nnunet511_all127_subjects.csv')
-    subj['K'] = subj.n_ref + subj.n_excluded; subj['flag'] = subj.n_cand < subj.K
+    subj['K'] = subj.n_ref + subj.n_excluded; subj['missed_only'] = subj.n_cand < subj.K  # fewer detections than markers: a false negative with no false positive
 
     # Figure 2: perfect detections, 3 cross-validation patients (top) and 3 independent (bottom)
     perfect = subj[subj.perfect & (subj.K == 3)].subject.tolist()
     cv_pick = [perfect[i] for i in (5, len(perfect) // 2, len(perfect) - 6)]
-    fr_pick = ['E05', 'E03', 'E02']
+    fr_pick = [pid(c) for c in ('E05', 'E03', 'E02')]
     fig, axs = plt.subplots(2, 3, figsize=(9, 6.3))
     for ax, s in zip(axs[0], cv_pick): panel(ax, P, OOF, cv, s, title='Cross-validation')
     for ax, s in zip(axs[1], fr_pick): panel(ax, F, FR_PROBS, fr, s, title='Independent test')
-    for ax, l in zip(axs.flat, 'ABCDEF'): ax.text(0.03, 0.95, l, transform=ax.transAxes, color='white', fontsize=11, fontweight='bold', va='top')
+    for ax, l in zip(axs.flat, 'ABCDEF'): ax.text(0.03, 0.95, l, transform=ax.transAxes, color='white', fontsize=11, fontweight='bold', va='top', path_effects=HALO_TXT)
     fig.tight_layout(); fig.savefig(f'{a.out}/Figure2.png', dpi=300); fig.savefig(f'{a.out}/Figure2.tiff', dpi=300)
 
-    # Figure 3: failures. Top: flagged (no candidate). Bottom: unflagged substitutions.
-    flagged = subj[subj.flag].subject.tolist()
-    subst = subj[~subj.flag & (subj.fn == 1) & (subj.fp == 1)].subject.tolist()
+    # Figure 3: failures. Top: false negatives (no candidate). Bottom: a false positive picked instead of a marker.
+    missed = subj[subj.missed_only].subject.tolist()
+    subst = subj[~subj.missed_only & (subj.fn == 1) & (subj.fp == 1)].subject.tolist()
     fig, axs = plt.subplots(2, 3, figsize=(9, 6.3))
-    for ax, s in zip(axs[0], flagged[:3]):
+    for ax, s in zip(axs[0], missed[:3]):
         j = mk[(mk.subject == s) & (mk.cat != 'hit')].marker.tolist()
         _, _, refs, _ = load(P, OOF, s)
-        panel(ax, P, OOF, cv, s, z=int(round(refs[j[0]][2])), fn_refs=j, title='Flagged for review')
-    # unflagged substitutions: the one patient whose FN and FP share a section, then one patient
+        panel(ax, P, OOF, cv, s, z=int(round(refs[j[0]][2])), fn_refs=j, title='Cross-validation (failures)')
+    # substitutions (FN plus FP): the one patient whose FN and FP share a section, then one patient
     # shown at its FN section and at its FP section
-    rows = [('S107', 'fn', 'Not flagged'), ('S091', 'fn', 'Not flagged (missed marker)'),
-            ('S091', 'fp', 'Not flagged (selected instead)')]
+    rows = [(pid('S107'), 'fn', 'Cross-validation (failures)'), (pid('S091'), 'fn', 'Cross-validation (failures)'),
+            (pid('S091'), 'fp', 'Cross-validation (failures)')]
     for ax, (s, which, ttl) in zip(axs[1], rows):
         j = mk[(mk.subject == s) & (mk.cat != 'hit')].marker.tolist()
         _, _, refs, _ = load(P, OOF, s)
@@ -111,9 +121,9 @@ def main():
         z = int(round(refs[j[0]][2])) if which == 'fn' else int(round(fpz)) if which == 'fp' else None
         panel(ax, P, OOF, cv, s, z=z, fn_refs=j, title=ttl)
     subst = [r[0] for r in rows]
-    for ax, l in zip(axs.flat, 'ABCDEF'): ax.text(0.03, 0.95, l, transform=ax.transAxes, color='white', fontsize=11, fontweight='bold', va='top')
+    for ax, l in zip(axs.flat, 'ABCDEF'): ax.text(0.03, 0.95, l, transform=ax.transAxes, color='white', fontsize=11, fontweight='bold', va='top', path_effects=HALO_TXT)
     fig.tight_layout(); fig.savefig(f'{a.out}/Figure3.png', dpi=300); fig.savefig(f'{a.out}/Figure3.tiff', dpi=300)
-    print('Figure 2:', cv_pick, fr_pick); print('Figure 3:', flagged[:3], subst[:3])
+    print('Figure 2:', cv_pick, fr_pick); print('Figure 3:', missed[:3], subst[:3])
 
 
 if __name__ == '__main__':
